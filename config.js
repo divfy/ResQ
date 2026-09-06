@@ -7,9 +7,8 @@
  * 3. Commit and push to GitHub. Vercel will automatically redeploy!
  */
 (function () {
-    // Set this to your Render service URL when deploying to production:
-    // e.g. const RESQ_BACKEND_URL = "https://resq-backend-xxxx.onrender.com";
-    const RESQ_BACKEND_URL = "";
+    // Production Render backend service URL:
+    const RESQ_BACKEND_URL = "https://resq-backend-dpxs.onrender.com";
 
     if (RESQ_BACKEND_URL) {
         const cleanUrl = RESQ_BACKEND_URL.replace(/\/+$/, "");
