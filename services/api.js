@@ -2,9 +2,40 @@
  * RESQ Centralized Frontend API and WebSocket Client Service
  */
 
+function getResolvedApiUrl() {
+    if (typeof window !== "undefined") {
+        if (window.RESQ_API_URL) return window.RESQ_API_URL.replace(/\/+$/, "");
+        const stored = localStorage.getItem("resq_api_url");
+        if (stored) return stored.replace(/\/+$/, "");
+        if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+            return "http://localhost:8000/api/v1";
+        }
+    }
+    return "http://localhost:8000/api/v1";
+}
+
+function getResolvedWsUrl() {
+    if (typeof window !== "undefined") {
+        if (window.RESQ_WS_URL) return window.RESQ_WS_URL.replace(/\/+$/, "");
+        const stored = localStorage.getItem("resq_ws_url");
+        if (stored) return stored.replace(/\/+$/, "");
+        const apiUrl = getResolvedApiUrl();
+        if (apiUrl.startsWith("https://")) {
+            return apiUrl.replace("https://", "wss://").replace(/\/api\/v1\/?$/, "");
+        } else if (apiUrl.startsWith("http://")) {
+            return apiUrl.replace("http://", "ws://").replace(/\/api\/v1\/?$/, "");
+        }
+    }
+    return "ws://localhost:8000";
+}
+
 const RESQ_API = {
-    baseUrl: (typeof window !== "undefined" && window.RESQ_API_URL) ? window.RESQ_API_URL : "http://localhost:8000/api/v1",
-    wsBaseUrl: (typeof window !== "undefined" && window.RESQ_WS_URL) ? window.RESQ_WS_URL : "ws://localhost:8000",
+    get baseUrl() {
+        return getResolvedApiUrl();
+    },
+    get wsBaseUrl() {
+        return getResolvedWsUrl();
+    },
 
     async request(endpoint, options = {}) {
         const url = `${this.baseUrl}${endpoint}`;
