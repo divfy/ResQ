@@ -39,24 +39,23 @@ ender.yaml and configure:
    - **Service Name**: 
 esq-backend
    - **Environment**: Python 3.11
-   - **Build Command**: pip install -r backend/requirements.txt
-   - **Start Command**: uvicorn backend.app.main:app --host 0.0.0.0 --port 
-   - **Health Check**: /healthz
+   - **Build Command**: `pip install -r backend/requirements.txt`
+   - **Start Command**: `python run.py`
+   - **Health Check**: `/healthz`
 5. Click **Apply**. Render will build and deploy your service.
 
 ### Option B: Manual Web Service Setup
 1. In the **[Render Dashboard](https://dashboard.render.com/)**, click **New +** &rarr; **Web Service**.
-2. Select **Build and deploy from a Git repository** and pick divfy/ResQ.
+2. Select **Build and deploy from a Git repository** and pick `divfy/ResQ`.
 3. Configure the fields:
-   - **Name**: 
-esq-backend (or any unique name)
+   - **Name**: `resq-backend` (or any unique name)
    - **Region**: Choose the closest region (e.g. *Singapore* or *Oregon*)
-   - **Branch**: main
+   - **Branch**: `main`
    - **Root Directory**: *(Leave empty)*
-   - **Runtime**: Python 3
-   - **Build Command**: pip install -r backend/requirements.txt
-   - **Start Command**: uvicorn backend.app.main:app --host 0.0.0.0 --port 
-   - **Instance Type**: Free
+   - **Runtime**: `Python 3`
+   - **Build Command**: `pip install -r backend/requirements.txt`
+   - **Start Command**: `python run.py`
+   - **Instance Type**: `Free`
 4. Expand **Advanced**:
    - **Health Check Path**: /healthz
    - **Auto-Deploy**: Yes
