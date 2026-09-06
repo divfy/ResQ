@@ -763,7 +763,16 @@
     ============================================================ */
 
     btnStartSim?.addEventListener("click", async () => {
-        if (!simulationId) return;
+        if (!simulationId) {
+            btnStartSim.innerHTML = `<span class="btn-icon">⏳</span><span class="btn-text">CONNECTING...</span>`;
+            await initializeBackendSimulation();
+            if (!simulationId) {
+                console.error("[RESQ] Backend simulation could not be initialized.");
+                btnStartSim.innerHTML = `<span class="btn-icon">▶</span><span class="btn-text">START SIMULATION</span>`;
+                alert("Connecting to backend simulation engine. If Render was asleep, it may take ~30s to wake up. Please click again.");
+                return;
+            }
+        }
         try {
             await api.startSimulation(simulationId);
             if (wsConnection) wsConnection.send("start");
@@ -774,6 +783,7 @@
             btnStartSim.innerHTML = `<span class="btn-icon">⚡</span><span class="btn-text">RUNNING</span>`;
         } catch (err) {
             console.error("[RESQ] Failed to start simulation:", err);
+            btnStartSim.innerHTML = `<span class="btn-icon">▶</span><span class="btn-text">START SIMULATION</span>`;
         }
     });
 

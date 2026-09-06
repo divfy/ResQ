@@ -10,6 +10,8 @@ function getResolvedApiUrl() {
         if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
             return "http://localhost:8000/api/v1";
         }
+        // Default to live production Render backend on Vercel or any remote device
+        return "https://resq-backend-dpxs.onrender.com/api/v1";
     }
     return "http://localhost:8000/api/v1";
 }
@@ -24,6 +26,9 @@ function getResolvedWsUrl() {
             return apiUrl.replace("https://", "wss://").replace(/\/api\/v1\/?$/, "");
         } else if (apiUrl.startsWith("http://")) {
             return apiUrl.replace("http://", "ws://").replace(/\/api\/v1\/?$/, "");
+        }
+        if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+            return "wss://resq-backend-dpxs.onrender.com";
         }
     }
     return "ws://localhost:8000";

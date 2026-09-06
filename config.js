@@ -12,7 +12,7 @@
 
     if (RESQ_BACKEND_URL) {
         const cleanUrl = RESQ_BACKEND_URL.replace(/\/+$/, "");
-        window.RESQ_API_URL = ${cleanUrl}/api/v1;
+        window.RESQ_API_URL = cleanUrl + "/api/v1";
         window.RESQ_WS_URL = cleanUrl.replace(/^http/, "ws");
     }
 })();
