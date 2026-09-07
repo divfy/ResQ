@@ -45,15 +45,16 @@ def create_tsunami_inundation_polygon(
     target_lng: float,
     target_lat: float,
     progress: float = 1.0,
-    num_steps: int = 28
+    num_steps: int = 36
 ) -> List[List[float]]:
     """
     Generate GeoJSON Polygon coordinates for an oceanic tsunami surge.
     The surge originates in the Bay of Bengal (east/right) and flows inland
     westward across the coast towards the target pinpoint.
+    Extended lateral span covers the full metropolitan coastline from north to south.
     """
-    ocean_lng = max(80.36, target_lng + 0.07)
-    lat_span = 0.115
+    ocean_lng = max(80.40, target_lng + 0.10)
+    lat_span = 0.24
     progress = max(0.05, min(1.0, progress))
 
     coords = []

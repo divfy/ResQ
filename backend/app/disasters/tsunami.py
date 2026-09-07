@@ -54,13 +54,13 @@ class TsunamiDisaster(BaseDisaster):
         Surge originates offshore in the Bay of Bengal (east / right) and flows
         westward across the coastline toward the user-selected pinpoint.
         """
-        lat_span = 0.115
+        lat_span = 0.24
         lat_diff = abs(lat - origin_lat)
         if lat_diff > lat_span:
             return {"in_hazard_zone": False, "intensity": 0.0, "surge_height": 0.0, "blocked": False, "damage_state": "NONE"}
 
         progress = self.calculate_surge_progress(elapsed_seconds)
-        ocean_lng = max(80.36, origin_lng + 0.07)
+        ocean_lng = max(80.40, origin_lng + 0.10)
 
         # Calculate where the surge front has reached at this latitude
         y = (lat - origin_lat) / lat_span

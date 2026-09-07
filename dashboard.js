@@ -53,6 +53,7 @@
     let currentSpeed = 1;
     let isSimulationStarted = false;
     let previousAffectedPopulation = null;
+    let maxCasualtiesSeen = 0;
 
     /* ============================================================
        2. DOM REFERENCES
@@ -644,10 +645,10 @@
     /* ------------------------------------------------------------
        HAZARD ENVELOPE PREVIEW GENERATOR
     ------------------------------------------------------------ */
-    function createTsunamiOceanicPolygon(targetLng, targetLat, progress = 1.0, numSteps = 28) {
+    function createTsunamiOceanicPolygon(targetLng, targetLat, progress = 1.0, numSteps = 36) {
         // Ocean boundary in Bay of Bengal (east of Chennai)
-        const oceanLng = Math.max(80.36, targetLng + 0.07);
-        const latSpan = 0.115;
+        const oceanLng = Math.max(80.40, targetLng + 0.10);
+        const latSpan = 0.24;
         const clampedProg = Math.max(0.05, Math.min(1.0, progress));
 
         const coords = [];
@@ -1010,7 +1011,8 @@
         el.className = "marker-origin-container";
         el.id = "hazardOriginMarker";
         
-        const disasterLabel = (simulationConfig.disaster || "HAZARD").toUpperCase();
+        const isTsunami = (simulationConfig.disaster || "").toLowerCase() === "tsunami";
+        const badgeLabel = isTsunami ? "TSUNAMI" : `${(simulationConfig.disaster || "HAZARD").toUpperCase()} ORIGIN`;
 
         el.innerHTML = `
             <div class="origin-radar-ping ping-1"></div>
@@ -1019,7 +1021,7 @@
             <div class="origin-pin-wrapper origin-drop-anim">
                 <div class="origin-pin-badge">
                     <span class="badge-dot"></span>
-                    <span class="badge-text">${disasterLabel} ORIGIN</span>
+                    <span class="badge-text">${badgeLabel}</span>
                 </div>
                 <div class="origin-pointer-body">
                     <svg class="origin-pointer-svg" viewBox="0 0 32 48" width="32" height="48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1407,7 +1409,8 @@
                 previousAffectedPopulation = currentAff;
             }
             if (counterCasualties && state.metrics.casualties !== undefined) {
-                animateValue(counterCasualties, state.metrics.casualties);
+                maxCasualtiesSeen = Math.max(maxCasualtiesSeen, state.metrics.casualties);
+                animateValue(counterCasualties, maxCasualtiesSeen);
             }
             animateValue(counterBlockedRoads, state.metrics.blockedRoads);
             animateValue(counterShelters, state.metrics.activeShelters);
@@ -1728,6 +1731,7 @@
                 btnStartSim.innerHTML = `<span class="btn-icon">▶</span><span class="btn-text">START SIMULATION</span>`;
             }
             previousAffectedPopulation = null;
+            maxCasualtiesSeen = 0;
             if (deltaAffected) {
                 deltaAffected.textContent = "— 0.0%";
                 deltaAffected.className = "metric-delta delta-neutral";

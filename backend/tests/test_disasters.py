@@ -101,7 +101,7 @@ def test_cyclone_swath_and_tracking():
     assert impact_midway["in_hazard_zone"] is True
 
 def test_tsunami_simulation_model():
-    """Verify tsunami wave run-up and coastal scouring."""
+    """Verify tsunami wave run-up, extended coastal lateral span, and non-decreasing casualties."""
     tsunami = TsunamiDisaster({"waveHeight": 12.0, "inundationDist": 3.5, "waveVelocity": 60})
     sev = tsunami.calculate_severity()
     assert 1.0 <= sev <= 5.0
@@ -111,6 +111,26 @@ def test_tsunami_simulation_model():
     impact_coast = tsunami.evaluate_point_impact(13.0830, 80.2710, origin_lat, origin_lng, elapsed_seconds=60)
     assert impact_coast["in_hazard_zone"] is True
     assert impact_coast["blocked"] is True
+
+    # Verify extended lateral coverage (points > 0.15 deg north/south along coast are now covered)
+    impact_north = tsunami.evaluate_point_impact(13.2500, 80.3000, origin_lat, origin_lng, elapsed_seconds=60)
+    assert impact_north["in_hazard_zone"] is True
+
+    # Verify SimulationInstance casualty preservation during wave recession
+    from backend.app.simulation.engine import SimulationInstance
+    sim = SimulationInstance("test-tsu", "scen-tsu", "chennai", "tsunami", origin_lat, origin_lng)
+    
+    # Run peak wave
+    sim.elapsed_seconds = 60
+    sim._recalculate_full_state()
+    peak_cas = sim.current_state["metrics"]["casualties"]
+    assert peak_cas > 0
+
+    # Run recession phase (t=800s)
+    sim.elapsed_seconds = 800
+    sim._recalculate_full_state()
+    recession_cas = sim.current_state["metrics"]["casualties"]
+    assert recession_cas >= peak_cas  # Casualties must never drop when tsunami goes back
 
 def test_earthquake_concentric_zones_and_dynamics():
     """Verify 4 concentric circular zones, depth determining final size, and PGA determining expansion speed."""

@@ -73,6 +73,7 @@ class SimulationInstance:
         
         # Current Snapshot State
         self.current_state: Dict[str, Any] = {}
+        self.cumulative_casualties: int = 0
         self._recalculate_full_state(initial=True)
 
     def _recalculate_full_state(self, initial: bool = False):
@@ -115,8 +116,8 @@ class SimulationInstance:
             # ONLY count land areas that have actually been breached by the ocean surge!
             # The ocean has zero municipal population.
             progress = getattr(self.hazard_model, "calculate_surge_progress", lambda s: 1.0)(self.elapsed_seconds)
-            ocean_lng = max(80.36, self.origin_lng + 0.07)
-            lat_span = 0.115
+            ocean_lng = max(80.40, self.origin_lng + 0.10)
+            lat_span = 0.24
             coast_lng = 80.292  # Coastal boundary of Chennai (Marina Beach / Royapuram)
 
             total_affected = 0.0
@@ -287,7 +288,8 @@ class SimulationInstance:
         hosp_capacity_pct = round((used_beds / max(1, total_beds)) * 100, 1) if total_beds > 0 else 0.0
 
         # Dynamic casualties estimation (injuries + fatalities)
-        if affected_pop == 0:
+        # Cumulative casualties never drop when flood/tsunami surge recedes
+        if affected_pop == 0 and self.cumulative_casualties == 0:
             casualties = 0
         else:
             disaster_rates = {
@@ -301,7 +303,9 @@ class SimulationInstance:
             time_growth = 0.25 + 0.75 * min(1.0, max(0, self.elapsed_seconds) / 160.0)
             hosp_stress_factor = 1.0 + (hosp_full / max(1, len(hospitals))) * 0.4
             road_stress_factor = 1.0 + (blocked_count / max(1, len(roads))) * 0.25
-            casualties = max(0, int(affected_pop * base_rate * sev_multiplier * time_growth * hosp_stress_factor * road_stress_factor))
+            current_calc = max(0, int(affected_pop * base_rate * sev_multiplier * time_growth * hosp_stress_factor * road_stress_factor))
+            self.cumulative_casualties = max(self.cumulative_casualties, current_calc)
+            casualties = self.cumulative_casualties
 
         metrics = {
             "affectedPopulation": affected_pop,
@@ -492,6 +496,7 @@ class SimulationInstance:
         if self.task and not self.task.done():
             self.task.cancel()
         self.elapsed_seconds = 0
+        self.cumulative_casualties = 0
         self.status = "INITIALIZED"
         self._recalculate_full_state(initial=True)
 
