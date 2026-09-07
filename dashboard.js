@@ -171,6 +171,8 @@
 
     let map = null;
     let poiMarkers = [];
+    let latestSimulationState = null;
+    let cachedCityData = null;
     const layerVisibility = {
         roads: true,
         evac: true,
@@ -213,10 +215,13 @@
             map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
 
             map.on("load", async () => {
+                await loadStaticCityInfrastructure();
                 setupDisasterLayers();
                 setupOriginMarker();
-                await loadStaticCityInfrastructure();
                 setupOriginClickInteraction();
+                if (latestSimulationState) {
+                    updateMapboxLayers(latestSimulationState);
+                }
             });
 
             map.on("zoom", () => {
@@ -238,9 +243,12 @@
         const style = getTileStyle(isLightMode());
         map.setStyle(style);
         map.once("style.load", async () => {
+            await loadStaticCityInfrastructure();
             setupDisasterLayers();
             setupOriginMarker();
-            await loadStaticCityInfrastructure();
+            if (latestSimulationState) {
+                updateMapboxLayers(latestSimulationState);
+            }
         });
     }
 
@@ -258,7 +266,10 @@
         if (!map) return;
 
         try {
-            const cityData = await api.getCityMapData(simulationConfig.city);
+            if (!cachedCityData) {
+                cachedCityData = await api.getCityMapData(simulationConfig.city);
+            }
+            const cityData = cachedCityData;
             if (!cityData) return;
 
             // 1. Add OSM Roads baseline source
@@ -334,7 +345,10 @@
 
             const popup = new maplibregl.Popup({ offset: 16, closeButton: false }).setHTML(popupHtml);
 
-            const marker = new maplibregl.Marker({ element: el })
+            const marker = new maplibregl.Marker({
+                element: el,
+                anchor: "center"
+            })
                 .setLngLat(coords)
                 .setPopup(popup)
                 .addTo(map);
@@ -348,6 +362,7 @@
     ------------------------------------------------------------ */
     function setupDisasterLayers() {
         if (!map) return;
+        const light = isLightMode();
 
         // 1. Hazard Polygon Overlay
         if (!map.getSource("hazard-source")) {
@@ -361,8 +376,8 @@
                 source: "hazard-source",
                 type: "fill",
                 paint: {
-                    "fill-color": "#f59e0b",
-                    "fill-opacity": 0.22
+                    "fill-color": light ? "#d97706" : "#f59e0b",
+                    "fill-opacity": light ? 0.35 : 0.22
                 }
             });
 
@@ -371,20 +386,37 @@
                 source: "hazard-source",
                 type: "line",
                 paint: {
-                    "line-color": "#f59e0b",
-                    "line-width": 2,
+                    "line-color": light ? "#b45309" : "#f59e0b",
+                    "line-width": light ? 3.0 : 2.0,
                     "line-dasharray": [3, 2]
                 }
             });
         }
 
-        // 2. Blocked Roads (Solid Red Line Layer)
+        // 2. Blocked Roads (Dual-layer: High-contrast dark casing + vivid red core)
         if (!map.getSource("blocked-roads-source")) {
             map.addSource("blocked-roads-source", {
                 type: "geojson",
                 data: { type: "FeatureCollection", features: [] }
             });
 
+            // Outer high-contrast casing
+            map.addLayer({
+                id: "blocked-roads-casing",
+                source: "blocked-roads-source",
+                type: "line",
+                layout: {
+                    "line-join": "round",
+                    "line-cap": "round"
+                },
+                paint: {
+                    "line-color": light ? "#450a0a" : "#1a0202",
+                    "line-width": 8.0,
+                    "line-opacity": 0.85
+                }
+            });
+
+            // Inner vivid red core
             map.addLayer({
                 id: "blocked-roads-line",
                 source: "blocked-roads-source",
@@ -394,20 +426,37 @@
                     "line-cap": "round"
                 },
                 paint: {
-                    "line-color": "#ef4444",
+                    "line-color": light ? "#dc2626" : "#ef4444",
                     "line-width": 5.0,
-                    "line-opacity": 0.95
+                    "line-opacity": 1.0
                 }
             });
         }
 
-        // 3. Evacuation Routes (Solid Green Line Layer)
+        // 3. Evacuation Routes (Dual-layer: High-contrast dark casing + vivid emerald core)
         if (!map.getSource("evac-routes-source")) {
             map.addSource("evac-routes-source", {
                 type: "geojson",
                 data: { type: "FeatureCollection", features: [] }
             });
 
+            // Outer high-contrast casing
+            map.addLayer({
+                id: "evac-routes-casing",
+                source: "evac-routes-source",
+                type: "line",
+                layout: {
+                    "line-join": "round",
+                    "line-cap": "round"
+                },
+                paint: {
+                    "line-color": light ? "#022c22" : "#011610",
+                    "line-width": 8.0,
+                    "line-opacity": 0.85
+                }
+            });
+
+            // Inner vivid emerald core
             map.addLayer({
                 id: "evac-routes-line",
                 source: "evac-routes-source",
@@ -417,15 +466,19 @@
                     "line-cap": "round"
                 },
                 paint: {
-                    "line-color": "#10b981",
+                    "line-color": light ? "#059669" : "#10b981",
                     "line-width": 5.0,
-                    "line-opacity": 0.95
+                    "line-opacity": 1.0
                 }
             });
         }
 
-        // Preview initial hazard envelope centered around origin
-        updatePreviewHazardPolygon();
+        // Reapply current active simulation data or initial preview
+        if (latestSimulationState) {
+            updateMapboxLayers(latestSimulationState);
+        } else {
+            updatePreviewHazardPolygon();
+        }
     }
 
     /* ------------------------------------------------------------
@@ -841,6 +894,9 @@
             mapRadiusReadout.textContent = `${state.hazardRadiusKm.toFixed(1)} km`;
         }
 
+        // Cache latest authoritative simulation state for style loads and theme switches
+        latestSimulationState = state;
+
         // 5. Update Mapbox Dynamic Layers
         updateMapboxLayers(state);
 
@@ -903,6 +959,7 @@
         }
 
         // D. Update POI Marker Classes (Hospital full / available)
+        // Uses classList to preserve MapLibre's internal marker anchoring classes
         if (state.hospitals) {
             state.hospitals.forEach(h => {
                 const markerObj = poiMarkers.find(m => {
@@ -911,12 +968,15 @@
                 });
                 if (markerObj) {
                     const el = markerObj.getElement();
+                    const span = el.querySelector("span");
                     if (h.operationalStatus === "FULL" || h.operationalStatus === "COMPROMISED") {
-                        el.className = "map-marker marker-hospital-full";
-                        el.innerHTML = "<span>✖</span>";
+                        el.classList.remove("marker-hospital-avail");
+                        el.classList.add("marker-hospital-full");
+                        if (span) span.textContent = "✖";
                     } else {
-                        el.className = "map-marker marker-hospital-avail";
-                        el.innerHTML = "<span>✚</span>";
+                        el.classList.remove("marker-hospital-full");
+                        el.classList.add("marker-hospital-avail");
+                        if (span) span.textContent = "✚";
                     }
                 }
             });
@@ -1036,10 +1096,12 @@
         const isActive = btn.classList.toggle("active");
         layerVisibility[layerKey] = isActive;
 
-        if (layerKey === "roads" && map.getLayer("blocked-roads-line")) {
-            map.setLayoutProperty("blocked-roads-line", "visibility", isActive ? "visible" : "none");
-        } else if (layerKey === "evac" && map.getLayer("evac-routes-line")) {
-            map.setLayoutProperty("evac-routes-line", "visibility", isActive ? "visible" : "none");
+        if (layerKey === "roads") {
+            if (map.getLayer("blocked-roads-casing")) map.setLayoutProperty("blocked-roads-casing", "visibility", isActive ? "visible" : "none");
+            if (map.getLayer("blocked-roads-line")) map.setLayoutProperty("blocked-roads-line", "visibility", isActive ? "visible" : "none");
+        } else if (layerKey === "evac") {
+            if (map.getLayer("evac-routes-casing")) map.setLayoutProperty("evac-routes-casing", "visibility", isActive ? "visible" : "none");
+            if (map.getLayer("evac-routes-line")) map.setLayoutProperty("evac-routes-line", "visibility", isActive ? "visible" : "none");
         } else if (layerKey === "hazard") {
             if (map.getLayer("hazard-fill")) map.setLayoutProperty("hazard-fill", "visibility", isActive ? "visible" : "none");
             if (map.getLayer("hazard-line")) map.setLayoutProperty("hazard-line", "visibility", isActive ? "visible" : "none");

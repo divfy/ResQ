@@ -730,6 +730,9 @@ html.light-mode .map-telemetry-bar , body.light-mode .map-telemetry-bar {
 
 /* Custom Map Marker Styling */
 .map-marker {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 28px;
     height: 28px;
     border-radius: 50%;
@@ -738,8 +741,14 @@ html.light-mode .map-telemetry-bar , body.light-mode .map-telemetry-bar {
     font-size: 13px;
     cursor: pointer;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-    /* No transition on marker container - prevents swinging/lagging when moving map */
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    pointer-events: auto;
+    user-select: none;
     will-change: transform;
+    /* Never allow transition on transform on marker container */
+    transition: none !important;
 }
 
 .map-marker span {
@@ -1761,20 +1770,6 @@ body.light-mode .origin-established-toast .toast-title {
 html.light-mode .origin-established-toast .toast-coords,
 body.light-mode .origin-established-toast .toast-coords {
     color: #374151;
-}
-
-.marker-hospital-full {
-    background: rgba(239, 68, 68, 0.95);
-    position: relative;
-}
-
-.marker-hospital-full::after {
-    content: "/";
-    position: absolute;
-    font-size: 16px;
-    font-weight: 900;
-    color: #fff;
-    transform: rotate(20deg);
 }
 
 
