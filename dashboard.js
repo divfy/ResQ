@@ -1012,7 +1012,8 @@
         el.id = "hazardOriginMarker";
         
         const isTsunami = (simulationConfig.disaster || "").toLowerCase() === "tsunami";
-        const badgeLabel = isTsunami ? "TSUNAMI" : `${(simulationConfig.disaster || "HAZARD").toUpperCase()} ORIGIN`;
+        const disasterLabel = (simulationConfig.disaster || "HAZARD").toUpperCase();
+        const badgeLabel = isTsunami ? "TSUNAMI" : `${disasterLabel} ORIGIN`;
 
         el.innerHTML = `
             <div class="origin-radar-ping ping-1"></div>
@@ -1061,7 +1062,7 @@
             className: "origin-map-popup"
         }).setHTML(`
             <div class="origin-popup-content">
-                <div class="origin-popup-title">🎯 ${disasterLabel} EPICENTER</div>
+                <div class="origin-popup-title">🎯 ${isTsunami ? "TSUNAMI TARGET" : `${disasterLabel} EPICENTER`}</div>
                 <div class="origin-popup-coords">${currentOrigin.latitude.toFixed(4)}° N, ${currentOrigin.longitude.toFixed(4)}° E</div>
                 <div class="origin-popup-note">Point of Origin Active</div>
             </div>
@@ -1156,9 +1157,10 @@
                 }
                 const popup = originMarker.getPopup();
                 if (popup) {
+                    const isTsu = (simulationConfig.disaster || "").toLowerCase() === "tsunami";
                     popup.setHTML(`
                         <div class="origin-popup-content">
-                            <div class="origin-popup-title">🎯 ${(simulationConfig.disaster || "HAZARD").toUpperCase()} EPICENTER</div>
+                            <div class="origin-popup-title">🎯 ${isTsu ? "TSUNAMI TARGET" : `${(simulationConfig.disaster || "HAZARD").toUpperCase()} EPICENTER`}</div>
                             <div class="origin-popup-coords">${newLat.toFixed(4)}° N, ${newLng.toFixed(4)}° E</div>
                             <div class="origin-popup-note">Point of Origin Established</div>
                         </div>
