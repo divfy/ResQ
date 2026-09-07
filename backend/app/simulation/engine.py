@@ -85,7 +85,10 @@ class SimulationInstance:
         
         # 2. Update Evacuation Routes based on blocked roads
         self.evac_engine.update_network_from_road_status(roads)
-        evac_routes = self.evac_engine.compute_evacuation_routes(shelters)
+        if self.elapsed_seconds > 0 or self.status == "RUNNING":
+            evac_routes = self.evac_engine.compute_evacuation_routes(shelters)
+        else:
+            evac_routes = []
         
         # 3. Aggregate Overview Metrics using Localized Population Density Zones
         zones = self.infrastructure.get("populationZones", [])

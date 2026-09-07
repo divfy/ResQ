@@ -721,6 +721,13 @@ html.light-mode .layer-pill , body.light-mode .layer-pill {
     border-radius: 1px;
 }
 
+.legend-indicator.blue-line {
+    background: #38bdf8;
+    height: 3px;
+    border-radius: 1px;
+    box-shadow: 0 0 6px rgba(56, 189, 248, 0.6);
+}
+
 .legend-indicator.yellow-box {
     background: rgba(245, 158, 11, 0.4);
     border: 1px solid var(--color-high);

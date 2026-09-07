@@ -50,6 +50,7 @@
     let currentProperties = {};
     let isPaused = false;
     let currentSpeed = 1;
+    let isSimulationStarted = false;
 
     /* ============================================================
        2. DOM REFERENCES
@@ -441,7 +442,7 @@
                 data: { type: "FeatureCollection", features: [] }
             });
 
-            // Outer high-contrast casing
+            // Outer high-contrast navy casing
             map.addLayer({
                 id: "evac-routes-casing",
                 source: "evac-routes-source",
@@ -451,13 +452,13 @@
                     "line-cap": "round"
                 },
                 paint: {
-                    "line-color": light ? "#022c22" : "#011610",
+                    "line-color": light ? "#0369a1" : "#082f49",
                     "line-width": 8.0,
-                    "line-opacity": 0.85
+                    "line-opacity": 0.90
                 }
             });
 
-            // Inner vivid emerald core
+            // Inner vivid electric blue / cyan core
             map.addLayer({
                 id: "evac-routes-line",
                 source: "evac-routes-source",
@@ -467,7 +468,7 @@
                     "line-cap": "round"
                 },
                 paint: {
-                    "line-color": light ? "#059669" : "#10b981",
+                    "line-color": light ? "#0284c7" : "#38bdf8",
                     "line-width": 5.0,
                     "line-opacity": 1.0
                 }
@@ -475,10 +476,16 @@
         }
 
         // Reapply current active simulation data or initial preview
-        if (latestSimulationState) {
+        if (latestSimulationState && isSimulationStarted) {
             updateMapboxLayers(latestSimulationState);
         } else {
             updatePreviewHazardPolygon();
+            if (map.getSource("evac-routes-source")) {
+                map.getSource("evac-routes-source").setData({ type: "FeatureCollection", features: [] });
+            }
+            if (map.getSource("blocked-roads-source")) {
+                map.getSource("blocked-roads-source").setData({ type: "FeatureCollection", features: [] });
+            }
         }
     }
 
@@ -898,6 +905,11 @@
             mapRadiusReadout.textContent = `${state.hazardRadiusKm.toFixed(1)} km`;
         }
 
+        // Track simulation active state
+        if (state.status === "RUNNING" || (state.elapsedSeconds && state.elapsedSeconds > 0)) {
+            isSimulationStarted = true;
+        }
+
         // Cache latest authoritative simulation state for style loads and theme switches
         latestSimulationState = state;
 
@@ -926,9 +938,12 @@
             });
         }
 
-        // B. Blocked Roads (Red line layer)
-        if (state.roads && map.getSource("blocked-roads-source")) {
-            const blockedFeatures = state.roads
+        // Active simulation check: evacuation routes and blocked roads should only appear after the sim starts!
+        const isSimActive = isSimulationStarted || (state && state.status === "RUNNING") || (state && state.elapsedSeconds > 0);
+
+        // B. Blocked Roads (Red line layer) - Only visible when simulation is active
+        if (map.getSource("blocked-roads-source")) {
+            const blockedFeatures = (isSimActive && state.roads) ? state.roads
                 .filter(r => r.blocked)
                 .map(r => ({
                     type: "Feature",
@@ -937,7 +952,7 @@
                         type: "LineString",
                         coordinates: r.coordinates
                     }
-                }));
+                })) : [];
 
             map.getSource("blocked-roads-source").setData({
                 type: "FeatureCollection",
@@ -945,16 +960,16 @@
             });
         }
 
-        // C. Evacuation Corridors (Green line layer)
-        if (state.evacuationRoutes && map.getSource("evac-routes-source")) {
-            const evacFeatures = state.evacuationRoutes.map(r => ({
+        // C. Evacuation Corridors (Electric Blue line layer) - Only visible when simulation is active
+        if (map.getSource("evac-routes-source")) {
+            const evacFeatures = (isSimActive && state.evacuationRoutes) ? state.evacuationRoutes.map(r => ({
                 type: "Feature",
                 properties: { name: r.name, status: "clear" },
                 geometry: {
                     type: "LineString",
                     coordinates: r.coordinates
                 }
-            }));
+            })) : [];
 
             map.getSource("evac-routes-source").setData({
                 type: "FeatureCollection",
@@ -1018,6 +1033,7 @@
             }
         }
         try {
+            isSimulationStarted = true;
             await api.startSimulation(simulationId);
             if (wsConnection) wsConnection.send("start");
             isPaused = false;
@@ -1026,6 +1042,7 @@
             btnStartSim.style.opacity = "0.7";
             btnStartSim.innerHTML = `<span class="btn-icon">⚡</span><span class="btn-text">RUNNING</span>`;
         } catch (err) {
+            isSimulationStarted = false;
             console.error("[RESQ] Failed to start simulation:", err);
             btnStartSim.innerHTML = `<span class="btn-icon">▶</span><span class="btn-text">START SIMULATION</span>`;
         }
@@ -1072,6 +1089,7 @@
     btnReset?.addEventListener("click", async () => {
         if (!simulationId) return;
         try {
+            isSimulationStarted = false;
             const resetState = await api.resetSimulation(simulationId);
             if (wsConnection) wsConnection.send("reset");
             isPaused = true;
