@@ -159,11 +159,14 @@ Return JSON with exact keys:
             threats = ["Violent receding currents", "Floating debris battering rams", "Coastal highway washouts"]
             priorities = ["Evacuate port and beach perimeters", "Safeguard inland relief corridors", "Mobilize maritime search and rescue"]
 
+        casualties = metrics.get("casualties", 0)
+        cas_str = f" ({casualties:,} casualties requiring triage)" if casualties > 0 else ""
+
         summary = (
             f"T+{elapsed_min}m SITREP — {city.upper()} [{sev_label} — SEV {severity:.1f}/5.0]: "
             f"An active {disaster.upper()} scenario is escalating across metropolitan districts ({prop_str}). "
-            f"Impact is characterized by {mech}. Currently, {affected_pop:,} civilians are within the direct hazard envelope, "
-            f"with {blocked_rds} arterial road corridors blocked and {outages} electrical grid substations offline."
+            f"Impact is characterized by {mech}. Currently, {affected_pop:,} civilians are within the direct hazard envelope"
+            f"{cas_str}, with {blocked_rds} arterial road corridors blocked and {outages} electrical grid substations offline."
         )
 
         guidance = (

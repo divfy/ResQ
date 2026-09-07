@@ -103,8 +103,23 @@ class SimulationInstance:
         used_beds = max(0, total_beds - avail_beds)
         hosp_capacity_pct = round((used_beds / max(1, total_beds)) * 100, 1) if total_beds > 0 else 0.0
 
+        # Dynamic casualties estimation (injuries + fatalities)
+        disaster_rates = {
+            "tsunami": 0.018,
+            "earthquake": 0.015,
+            "flood": 0.007,
+            "cyclone": 0.005
+        }
+        base_rate = disaster_rates.get(self.disaster.lower(), 0.008)
+        sev_multiplier = max(0.5, (severity / 3.0) ** 1.6)
+        time_growth = 0.25 + 0.75 * min(1.0, max(0, self.elapsed_seconds) / 160.0)
+        hosp_stress_factor = 1.0 + (hosp_full / max(1, len(hospitals))) * 0.4
+        road_stress_factor = 1.0 + (blocked_count / max(1, len(roads))) * 0.25
+        casualties = max(0, int(affected_pop * base_rate * sev_multiplier * time_growth * hosp_stress_factor * road_stress_factor))
+
         metrics = {
             "affectedPopulation": affected_pop,
+            "casualties": casualties,
             "availableHospitals": hosp_avail,
             "fullHospitals": hosp_full,
             "totalHospitals": len(hospitals),

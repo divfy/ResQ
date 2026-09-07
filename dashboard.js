@@ -69,6 +69,7 @@
 
     // Overview Counters & AI
     const counterAffected = document.getElementById("counterAffected");
+    const counterCasualties = document.getElementById("counterCasualties");
     const counterHospAvail = document.getElementById("counterHospAvail");
     const counterHospFull = document.getElementById("counterHospFull");
     const hospCapacityFill = document.getElementById("hospCapacityFill");
@@ -855,6 +856,9 @@
         // 1. Overview Counters (Animated Ticks)
         if (state.metrics) {
             animateValue(counterAffected, state.metrics.affectedPopulation);
+            if (counterCasualties && state.metrics.casualties !== undefined) {
+                animateValue(counterCasualties, state.metrics.casualties);
+            }
             animateValue(counterBlockedRoads, state.metrics.blockedRoads);
             animateValue(counterShelters, state.metrics.activeShelters);
             animateValue(counterOutages, state.metrics.powerOutages);

@@ -32,6 +32,7 @@ class SimulationEngine {
             properties: {},
             metrics: {
                 affectedPeople: 0,
+                casualties: 0,
                 hospitalsAvailable: 0,
                 hospitalsFull: 0,
                 hospitalsTotal: 0,
@@ -58,6 +59,7 @@ class SimulationEngine {
 
         if (serverState.metrics) {
             this.state.metrics.affectedPeople = serverState.metrics.affectedPopulation || 0;
+            this.state.metrics.casualties = serverState.metrics.casualties || 0;
             this.state.metrics.hospitalsAvailable = serverState.metrics.availableHospitals || 0;
             this.state.metrics.hospitalsFull = serverState.metrics.fullHospitals || 0;
             this.state.metrics.hospitalsTotal = serverState.metrics.totalHospitals || 0;

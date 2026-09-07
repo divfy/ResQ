@@ -30,7 +30,7 @@
         })();
     </script>
 
-    <link rel="stylesheet" href="dashboard.css?v=6" />
+    <link rel="stylesheet" href="dashboard.css?v=7" />
 </head>
 <body>
     <!-- Background Texture -->
@@ -188,14 +188,27 @@
 
                 <!-- Real-Time Metrics Counters Grid -->
                 <div class="metrics-grid">
-                    <!-- Metric: Affected People -->
+                    <!-- Metric: Affected People & Casualties -->
                     <div class="metric-card metric-critical">
-                        <div class="metric-label">AFFECTED POPULATION</div>
-                        <div class="metric-value-row">
-                            <span class="metric-value" id="counterAffected">0</span>
-                            <span class="metric-delta" id="deltaAffected">↑ 4.2%</span>
+                        <div class="metric-impact-split">
+                            <div class="impact-col">
+                                <div class="metric-label">AFFECTED POPULATION</div>
+                                <div class="metric-value-row">
+                                    <span class="metric-value" id="counterAffected">0</span>
+                                    <span class="metric-delta" id="deltaAffected">↑ 4.2%</span>
+                                </div>
+                                <div class="metric-footer">IN HAZARD ENVELOPE</div>
+                            </div>
+                            <div class="impact-divider"></div>
+                            <div class="impact-col">
+                                <div class="metric-label text-danger">ESTIMATED CASUALTIES</div>
+                                <div class="metric-value-row">
+                                    <span class="metric-value text-danger" id="counterCasualties">0</span>
+                                    <span class="metric-badge-red" id="badgeCasualties">CRITICAL</span>
+                                </div>
+                                <div class="metric-footer">INJURIES & FATALITIES</div>
+                            </div>
                         </div>
-                        <div class="metric-footer">IN PRIMARY HAZARD ENVELOPE</div>
                     </div>
 
                     <!-- Metric: Hospitals Available vs Full -->
@@ -368,10 +381,10 @@
     </main>
 
     <!-- Core Scripts (Config -> API Client -> Data Rules -> Engine -> Dashboard Orchestration) -->
-    <script src="config.js?v=6"></script>
-    <script src="services/api.js?v=6"></script>
-    <script src="data/disaster-rules.js?v=6"></script>
-    <script src="simulation-engine.js?v=6"></script>
-    <script src="dashboard.js?v=6"></script>
+    <script src="config.js?v=7"></script>
+    <script src="services/api.js?v=7"></script>
+    <script src="data/disaster-rules.js?v=7"></script>
+    <script src="simulation-engine.js?v=7"></script>
+    <script src="dashboard.js?v=7"></script>
 </body>
 </html>

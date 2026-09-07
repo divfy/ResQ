@@ -117,6 +117,7 @@ class AIResponse(BaseModel):
 
 class OverviewMetrics(BaseModel):
     affectedPopulation: int
+    casualties: int = 0
     availableHospitals: int
     fullHospitals: int
     totalHospitals: int
