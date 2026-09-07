@@ -1,5 +1,6 @@
 """Road Network Graph and Routing Engine using NetworkX."""
 
+import math
 import networkx as nx
 from typing import List, Dict, Any, Tuple, Optional
 
@@ -9,21 +10,20 @@ from ..core.logging import logger
 
 class RoadNetwork:
     """
-    Road-network graph used for evacuation routing.
+    Road network used for evacuation routing.
 
-    Blocked roads are excluded from the traversable graph entirely.
-    This ensures routing searches for a genuine alternate path rather
-    than selecting a blocked road and rejecting the result afterward.
+    The graph is built from the actual road LineString geometry.
+    Roads are split at intersections so crossing roads become connected.
+    Start/end locations are snapped to the nearest point on a road,
+    rather than simply to the nearest road vertex.
     """
 
-    # Prevent a population zone or shelter from being snapped to a road
-    # that is unrealistically far away.
     MAX_SNAP_DISTANCE_KM = 5.0
+    INTERSECTION_TOLERANCE_DEG = 1e-9
 
     def __init__(self, roads_data: List[Dict[str, Any]]):
         self.roads_data = roads_data
 
-        # Full graph contains all roads, including blocked ones.
         self.graph = nx.Graph()
 
         # node_id -> (lng, lat)
@@ -34,157 +34,502 @@ class RoadNetwork:
 
         self._build_graph()
 
+    # ------------------------------------------------------------------
+    # BASIC GEOMETRY HELPERS
+    # ------------------------------------------------------------------
+
     @staticmethod
-    def _node_id(point: List[float]) -> str:
-        """Create a stable node ID from [lng, lat]."""
-        return f"{round(point[0], 5)}_{round(point[1], 5)}"
+    def _node_id(lng: float, lat: float) -> str:
+        """
+        Stable graph node ID.
+
+        7 decimal places gives enough precision for road geometry while
+        avoiding floating-point noise creating duplicate nodes.
+        """
+        return f"{round(lng, 7)}_{round(lat, 7)}"
+
+    @staticmethod
+    def _orientation(
+        ax: float,
+        ay: float,
+        bx: float,
+        by: float,
+        cx: float,
+        cy: float,
+    ) -> float:
+        """2D cross product used for segment intersection tests."""
+        return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+
+    @classmethod
+    def _segment_intersection(
+        cls,
+        a: Tuple[float, float],
+        b: Tuple[float, float],
+        c: Tuple[float, float],
+        d: Tuple[float, float],
+    ) -> Optional[Tuple[float, float]]:
+        """
+        Return the intersection point of two line segments.
+
+        Coordinates are treated as a local 2D plane. This is appropriate
+        for the very small distances represented by individual road
+        segments.
+
+        Returns None when the segments do not cross.
+        """
+
+        ax, ay = a
+        bx, by = b
+        cx, cy = c
+        dx, dy = d
+
+        denominator = (
+            (ax - bx) * (cy - dy)
+            - (ay - by) * (cx - dx)
+        )
+
+        if abs(denominator) < cls.INTERSECTION_TOLERANCE_DEG:
+            # Parallel or collinear.
+            return None
+
+        t = (
+            (ax - cx) * (cy - dy)
+            - (ay - cy) * (cx - dx)
+        ) / denominator
+
+        u = -(
+            (ax - bx) * (ay - cy)
+            - (ay - by) * (ax - cx)
+        ) / denominator
+
+        tolerance = 1e-9
+
+        if (
+            -tolerance <= t <= 1 + tolerance
+            and -tolerance <= u <= 1 + tolerance
+        ):
+            lng = ax + t * (bx - ax)
+            lat = ay + t * (by - ay)
+
+            return lng, lat
+
+        return None
+
+    @staticmethod
+    def _point_to_segment_projection(
+        point: Tuple[float, float],
+        a: Tuple[float, float],
+        b: Tuple[float, float],
+    ) -> Tuple[float, float, float]:
+        """
+        Project a point onto a line segment.
+
+        Returns:
+            projected_lng,
+            projected_lat,
+            parameter_t
+
+        t=0 means A.
+        t=1 means B.
+        """
+
+        px, py = point
+        ax, ay = a
+        bx, by = b
+
+        dx = bx - ax
+        dy = by - ay
+
+        segment_length_squared = dx * dx + dy * dy
+
+        if segment_length_squared == 0:
+            return ax, ay, 0.0
+
+        t = (
+            (px - ax) * dx
+            + (py - ay) * dy
+        ) / segment_length_squared
+
+        t = max(0.0, min(1.0, t))
+
+        projected_x = ax + t * dx
+        projected_y = ay + t * dy
+
+        return projected_x, projected_y, t
+
+    # ------------------------------------------------------------------
+    # GRAPH CONSTRUCTION
+    # ------------------------------------------------------------------
 
     def _build_graph(self):
-        """Construct the NetworkX graph from road line segments."""
+        """
+        Build a graph from the supplied road LineStrings.
+
+        Every road segment is split at:
+        - its original vertices
+        - intersections with other roads
+
+        This is what allows routing to move correctly from one road
+        to another at an actual physical intersection.
+        """
+
+        road_segments = []
 
         for road in self.roads_data:
             road_id = road["id"]
             coords = road.get("coordinates", [])
-            speed = max(10.0, float(road.get("speedKmh", 50)))
-            is_blocked = bool(road.get("blocked", False))
 
             if len(coords) < 2:
                 logger.warning(
-                    "Skipping road %s because it has fewer than two coordinates.",
+                    "Skipping road %s because it has fewer than two points.",
                     road_id,
                 )
                 continue
 
+            speed = max(
+                10.0,
+                float(road.get("speedKmh", 50)),
+            )
+
+            blocked = bool(
+                road.get("blocked", False)
+            )
+
             for i in range(len(coords) - 1):
-                pt1 = coords[i]
-                pt2 = coords[i + 1]
-
-                node1 = self._node_id(pt1)
-                node2 = self._node_id(pt2)
-
-                self.node_coords[node1] = (pt1[0], pt1[1])
-                self.node_coords[node2] = (pt2[0], pt2[1])
-
-                dist_km = haversine_distance_km(
-                    pt1[1],
-                    pt1[0],
-                    pt2[1],
-                    pt2[0],
+                start = (
+                    float(coords[i][0]),
+                    float(coords[i][1]),
                 )
 
-                # Travel time in hours.
-                travel_time_hours = dist_km / speed
+                end = (
+                    float(coords[i + 1][0]),
+                    float(coords[i + 1][1]),
+                )
 
-                # Use travel time as the routing weight.
-                # Shorter/faster routes are therefore preferred.
-                weight = travel_time_hours
+                if start == end:
+                    continue
+
+                road_segments.append(
+                    {
+                        "road_id": road_id,
+                        "start": start,
+                        "end": end,
+                        "speed": speed,
+                        "blocked": blocked,
+                    }
+                )
+
+        # Every segment initially contains its two original endpoints.
+        split_points: Dict[int, List[Tuple[float, float]]] = {}
+
+        for index, segment in enumerate(road_segments):
+            split_points[index] = [
+                segment["start"],
+                segment["end"],
+            ]
+
+        # --------------------------------------------------------------
+        # FIND ROAD INTERSECTIONS
+        # --------------------------------------------------------------
+
+        for i in range(len(road_segments)):
+            segment_a = road_segments[i]
+
+            for j in range(i + 1, len(road_segments)):
+                segment_b = road_segments[j]
+
+                # Segments belonging to the same road already have their
+                # shared vertices represented, so no need to test them.
+                if segment_a["road_id"] == segment_b["road_id"]:
+                    continue
+
+                intersection = self._segment_intersection(
+                    segment_a["start"],
+                    segment_a["end"],
+                    segment_b["start"],
+                    segment_b["end"],
+                )
+
+                if intersection is not None:
+                    split_points[i].append(intersection)
+                    split_points[j].append(intersection)
+
+        # --------------------------------------------------------------
+        # CREATE SPLIT ROAD EDGES
+        # --------------------------------------------------------------
+
+        for index, segment in enumerate(road_segments):
+            points = split_points[index]
+
+            start = segment["start"]
+            end = segment["end"]
+
+            # Sort points along the original road segment.
+            points = sorted(
+                points,
+                key=lambda point: (
+                    (point[0] - start[0]) ** 2
+                    + (point[1] - start[1]) ** 2
+                ),
+            )
+
+            # Remove duplicate points.
+            unique_points = []
+
+            for point in points:
+                if not unique_points:
+                    unique_points.append(point)
+                    continue
+
+                previous = unique_points[-1]
+
+                if (
+                    abs(point[0] - previous[0]) > 1e-9
+                    or abs(point[1] - previous[1]) > 1e-9
+                ):
+                    unique_points.append(point)
+
+            for i in range(len(unique_points) - 1):
+                point_a = unique_points[i]
+                point_b = unique_points[i + 1]
+
+                node_a = self._node_id(
+                    point_a[0],
+                    point_a[1],
+                )
+
+                node_b = self._node_id(
+                    point_b[0],
+                    point_b[1],
+                )
+
+                self.node_coords[node_a] = point_a
+                self.node_coords[node_b] = point_b
+
+                distance_km = haversine_distance_km(
+                    point_a[1],
+                    point_a[0],
+                    point_b[1],
+                    point_b[0],
+                )
+
+                speed = segment["speed"]
+
+                travel_time_hours = (
+                    distance_km / speed
+                    if speed > 0
+                    else float("inf")
+                )
 
                 self.graph.add_edge(
-                    node1,
-                    node2,
-                    road_id=road_id,
-                    length_km=dist_km,
+                    node_a,
+                    node_b,
+                    road_id=segment["road_id"],
+                    length_km=distance_km,
                     speed_kmh=speed,
-                    weight=weight,
-                    blocked=is_blocked,
+                    weight=travel_time_hours,
+                    blocked=segment["blocked"],
                 )
 
-                self.edge_roads[(node1, node2)] = road_id
-                self.edge_roads[(node2, node1)] = road_id
+                self.edge_roads[
+                    (node_a, node_b)
+                ] = segment["road_id"]
 
-    def update_road_blockage(self, road_id: str, blocked: bool):
+                self.edge_roads[
+                    (node_b, node_a)
+                ] = segment["road_id"]
+
+    # ------------------------------------------------------------------
+    # ROAD STATUS
+    # ------------------------------------------------------------------
+
+    def update_road_blockage(
+        self,
+        road_id: str,
+        blocked: bool,
+    ):
         """
-        Update blocked status of every graph edge belonging to road_id.
-
-        We keep the edge in the full graph so its state can change again
-        later during the simulation. Traversability is handled by
-        _get_traversable_graph().
+        Update every graph edge belonging to a road.
         """
 
         for _, _, data in self.graph.edges(data=True):
-            if data.get("road_id") == road_id:
-                data["blocked"] = bool(blocked)
+            if data.get("road_id") != road_id:
+                continue
+
+            data["blocked"] = bool(blocked)
+
+    # ------------------------------------------------------------------
+    # TRAVERSABLE GRAPH
+    # ------------------------------------------------------------------
 
     def _get_traversable_graph(self) -> nx.Graph:
         """
-        Return a graph containing ONLY currently traversable road edges.
-
-        Blocked roads are physically absent from this graph. This is
-        important because giving blocked roads a huge weight is not enough:
-        Dijkstra can still use them if no cheaper path exists.
+        Return a graph containing only open road segments.
         """
 
-        traversable = nx.Graph()
+        graph = nx.Graph()
 
-        # Preserve nodes/coordinates so isolated-but-valid nodes can still
-        # be considered by NetworkX.
-        traversable.add_nodes_from(self.graph.nodes(data=True))
+        graph.add_nodes_from(
+            self.graph.nodes(data=True)
+        )
 
         for u, v, data in self.graph.edges(data=True):
             if data.get("blocked", False):
                 continue
 
-            traversable.add_edge(u, v, **data)
+            graph.add_edge(
+                u,
+                v,
+                **data,
+            )
 
-        return traversable
+        return graph
 
-    def find_nearest_node(
+    # ------------------------------------------------------------------
+    # NEAREST POINT ON ROAD
+    # ------------------------------------------------------------------
+
+    def _find_nearest_road_point(
         self,
         lng: float,
         lat: float,
-        graph: Optional[nx.Graph] = None,
-        max_distance_km: Optional[float] = None,
-    ) -> Optional[str]:
+        graph: nx.Graph,
+    ) -> Optional[Dict[str, Any]]:
         """
-        Find the nearest usable graph node.
+        Find the closest point on any currently traversable road segment.
 
-        If a traversable graph is supplied, nodes that have no usable road
-        connection are ignored.
+        This is more accurate than snapping to the nearest road vertex.
         """
 
-        if graph is None:
-            graph = self.graph
-
-        if max_distance_km is None:
-            max_distance_km = self.MAX_SNAP_DISTANCE_KM
-
-        if graph.number_of_nodes() == 0:
+        if graph.number_of_edges() == 0:
             return None
 
-        min_dist = float("inf")
-        nearest = None
+        best = None
+        best_distance = float("inf")
 
-        for node in graph.nodes:
-            # A node with no traversable edges is not useful for routing.
-            if graph.degree(node) == 0:
-                continue
+        for u, v, data in graph.edges(data=True):
 
-            node_coords = self.node_coords.get(node)
+            point_a = self.node_coords[u]
+            point_b = self.node_coords[v]
 
-            if node_coords is None:
-                continue
-
-            n_lng, n_lat = node_coords
-
-            distance = haversine_distance_km(
-                lat,
-                lng,
-                n_lat,
-                n_lng,
+            projected_lng, projected_lat, t = (
+                self._point_to_segment_projection(
+                    (lng, lat),
+                    point_a,
+                    point_b,
+                )
             )
 
-            if distance < min_dist:
-                min_dist = distance
-                nearest = node
+            distance_km = haversine_distance_km(
+                lat,
+                lng,
+                projected_lat,
+                projected_lng,
+            )
 
-        if nearest is None:
+            if distance_km < best_distance:
+                best_distance = distance_km
+
+                best = {
+                    "u": u,
+                    "v": v,
+                    "lng": projected_lng,
+                    "lat": projected_lat,
+                    "distance_km": distance_km,
+                    "t": t,
+                    "edge_data": data,
+                }
+
+        if best is None:
             return None
 
-        # Don't snap a zone/shelter to a completely unrelated road.
-        if min_dist > max_distance_km:
+        if best["distance_km"] > self.MAX_SNAP_DISTANCE_KM:
             return None
 
-        return nearest
+        return best
+
+    # ------------------------------------------------------------------
+    # TEMPORARY ROUTING NODES
+    # ------------------------------------------------------------------
+
+    def _connect_point_to_road(
+        self,
+        graph: nx.Graph,
+        point: Dict[str, Any],
+        prefix: str,
+    ) -> str:
+        """
+        Insert a temporary routing node at the exact projected point
+        on a road segment.
+
+        The original road edge is split into:
+            road start -> projected point -> road end
+        """
+
+        u = point["u"]
+        v = point["v"]
+
+        lng = point["lng"]
+        lat = point["lat"]
+
+        # If the projected point is already an endpoint, reuse it.
+        if point["t"] <= 1e-8:
+            return u
+
+        if point["t"] >= 1 - 1e-8:
+            return v
+
+        node = f"{prefix}_{self._node_id(lng, lat)}"
+
+        self.node_coords[node] = (
+            lng,
+            lat,
+        )
+
+        edge_data = graph.get_edge_data(u, v)
+
+        if edge_data is None:
+            return node
+
+        total_distance = edge_data["length_km"]
+        speed = edge_data.get("speed_kmh", 50)
+
+        distance_u = total_distance * point["t"]
+        distance_v = total_distance * (1 - point["t"])
+
+        time_u = distance_u / speed
+        time_v = distance_v / speed
+
+        # Remove original segment.
+        graph.remove_edge(u, v)
+
+        # Connect U -> projected point.
+        graph.add_edge(
+            u,
+            node,
+            road_id=edge_data["road_id"],
+            length_km=distance_u,
+            speed_kmh=speed,
+            weight=time_u,
+            blocked=False,
+        )
+
+        # Connect projected point -> V.
+        graph.add_edge(
+            node,
+            v,
+            road_id=edge_data["road_id"],
+            length_km=distance_v,
+            speed_kmh=speed,
+            weight=time_v,
+            blocked=False,
+        )
+
+        return node
+
+    # ------------------------------------------------------------------
+    # ROUTING
+    # ------------------------------------------------------------------
 
     def get_evacuation_route(
         self,
@@ -194,75 +539,130 @@ class RoadNetwork:
         end_lat: float,
     ) -> Optional[List[List[float]]]:
         """
-        Find the shortest valid evacuation route between two coordinates.
+        Find a shortest valid evacuation route using only open roads.
 
-        Only unblocked roads are considered.
-
-        Returns:
-            List of [lng, lat] coordinates representing the route,
-            or None when no valid route exists.
+        Start and end coordinates are projected onto actual road
+        segments. The resulting route therefore follows road geometry
+        instead of drawing arbitrary straight lines.
         """
 
-        # Build a graph containing ONLY open roads.
-        traversable_graph = self._get_traversable_graph()
+        graph = self._get_traversable_graph()
 
-        if traversable_graph.number_of_edges() == 0:
+        if graph.number_of_edges() == 0:
             return None
 
-        # Snap both endpoints to usable road nodes.
-        start_node = self.find_nearest_node(
+        # --------------------------------------------------------------
+        # SNAP START TO ACTUAL ROAD SEGMENT
+        # --------------------------------------------------------------
+
+        start_point = self._find_nearest_road_point(
             start_lng,
             start_lat,
-            graph=traversable_graph,
+            graph,
         )
 
-        end_node = self.find_nearest_node(
-            end_lng,
-            end_lat,
-            graph=traversable_graph,
-        )
-
-        if start_node is None or end_node is None:
+        if start_point is None:
+            logger.warning(
+                "Could not snap evacuation start point "
+                "(%.6f, %.6f) to an open road.",
+                start_lng,
+                start_lat,
+            )
             return None
 
+        # --------------------------------------------------------------
+        # SNAP END TO ACTUAL ROAD SEGMENT
+        # --------------------------------------------------------------
+
+        end_point = self._find_nearest_road_point(
+            end_lng,
+            end_lat,
+            graph,
+        )
+
+        if end_point is None:
+            logger.warning(
+                "Could not snap evacuation destination "
+                "(%.6f, %.6f) to an open road.",
+                end_lng,
+                end_lat,
+            )
+            return None
+
+        # --------------------------------------------------------------
+        # ADD TEMPORARY START/END NODES
+        # --------------------------------------------------------------
+
+        start_node = self._connect_point_to_road(
+            graph,
+            start_point,
+            "START",
+        )
+
+        # Recalculate the end projection after potentially modifying
+        # the graph for the start point.
+        end_point = self._find_nearest_road_point(
+            end_lng,
+            end_lat,
+            graph,
+        )
+
+        if end_point is None:
+            return None
+
+        end_node = self._connect_point_to_road(
+            graph,
+            end_point,
+            "END",
+        )
+
         if start_node == end_node:
-            # Both endpoints snapped to the same road node.
             return [
                 list(self.node_coords[start_node])
             ]
 
+        # --------------------------------------------------------------
+        # FIND SHORTEST OPEN-ROAD PATH
+        # --------------------------------------------------------------
+
         try:
             path = nx.shortest_path(
-                traversable_graph,
+                graph,
                 source=start_node,
                 target=end_node,
                 weight="weight",
             )
 
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
-            # There is genuinely no connected open-road route.
+        except (
+            nx.NetworkXNoPath,
+            nx.NodeNotFound,
+        ):
             return None
 
         if len(path) < 2:
             return None
 
-        # Convert graph nodes back to [lng, lat].
-        coords = [
+        # --------------------------------------------------------------
+        # CONVERT GRAPH PATH TO ACTUAL MAP COORDINATES
+        # --------------------------------------------------------------
+
+        coordinates = [
             list(self.node_coords[node])
             for node in path
         ]
 
-        return coords
+        return coordinates
+
+    # ------------------------------------------------------------------
+    # ROUTE DISTANCE
+    # ------------------------------------------------------------------
 
     def get_route_cost(
         self,
         route: List[List[float]],
     ) -> float:
         """
-        Calculate approximate route distance in kilometres.
-
-        Used by the evacuation engine to compare multiple reachable
-        shelters.
+        Return total route distance in kilometres.
         """
 
         if not route or len(route) < 2:
