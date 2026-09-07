@@ -369,28 +369,32 @@
         const isTsunami = (simulationConfig.disaster || "").toLowerCase() === "tsunami";
         const isCyclone = (simulationConfig.disaster || "").toLowerCase() === "cyclone";
         const isEarthquake = (simulationConfig.disaster || "").toLowerCase() === "earthquake";
+        const isFlood = (simulationConfig.disaster || "").toLowerCase() === "flood";
 
         // Disaster-specific color palettes:
-        // - Tsunami: ocean surge translucent water blue with vivid cyan/white wavecrest border
+        // - Flood & Tsunami: aquatic water blue resembling inundation/flood water
         // - Cyclone: atmospheric vortex translucent violet/purple with neon purple boundary
-        // - Flood & Earthquake: tactical high-contrast amber
-        const hazardFillColor = isTsunami
-            ? (light ? "#0284c7" : "#0369a1")
+        // - Earthquake: multi-zone seismic colors
+        // - Other: tactical high-contrast amber
+        const isWaterDisaster = isTsunami || isFlood;
+
+        const hazardFillColor = isWaterDisaster
+            ? (light ? "#0284c7" : "#0284c7")
             : isCyclone
             ? (light ? "#8b5cf6" : "#7c3aed")
             : (light ? "#d97706" : "#f59e0b");
-        const hazardFillOpacity = isTsunami
-            ? (light ? 0.45 : 0.38)
+        const hazardFillOpacity = isWaterDisaster
+            ? (light ? 0.40 : 0.32)
             : isCyclone
             ? (light ? 0.35 : 0.28)
             : (light ? 0.35 : 0.22);
-        const hazardLineColor = isTsunami
-            ? (light ? "#0284c7" : "#38bdf8")
+        const hazardLineColor = isWaterDisaster
+            ? (light ? "#0369a1" : "#38bdf8")
             : isCyclone
             ? (light ? "#7c3aed" : "#c084fc")
             : (light ? "#b45309" : "#f59e0b");
-        const hazardLineWidth = isTsunami ? (light ? 3.5 : 2.8) : isCyclone ? (light ? 3.2 : 2.8) : (light ? 3.0 : 2.0);
-        const hazardDashArray = isTsunami ? [4, 1] : isCyclone ? [2, 2] : [3, 2];
+        const hazardLineWidth = isWaterDisaster ? (light ? 3.2 : 2.6) : isCyclone ? (light ? 3.2 : 2.8) : (light ? 3.0 : 2.0);
+        const hazardDashArray = isTsunami ? [4, 1] : isFlood ? [3, 2] : isCyclone ? [2, 2] : [3, 2];
 
         // Update Legend Pill Indicator
         const legendHazardInd = document.getElementById("legendHazardIndicator");
@@ -400,6 +404,9 @@
             if (isTsunami) {
                 legendHazardInd.classList.add("blue-box");
                 if (legendHazardTxt) legendHazardTxt.textContent = "TSUNAMI SURGE";
+            } else if (isFlood) {
+                legendHazardInd.classList.add("blue-box");
+                if (legendHazardTxt) legendHazardTxt.textContent = "FLOOD WATER";
             } else if (isCyclone) {
                 legendHazardInd.classList.add("purple-box");
                 if (legendHazardTxt) legendHazardTxt.textContent = "CYCLONE SWATH";
@@ -782,9 +789,11 @@
 
     function updatePreviewHazardPolygon() {
         if (!map || !map.getSource("hazard-source")) return;
+        const light = isLightMode();
         const isTsunami = (simulationConfig.disaster || "").toLowerCase() === "tsunami";
         const isCyclone = (simulationConfig.disaster || "").toLowerCase() === "cyclone";
         const isEarthquake = (simulationConfig.disaster || "").toLowerCase() === "earthquake";
+        const isFlood = (simulationConfig.disaster || "").toLowerCase() === "flood";
 
         // Cyclone: Before starting the simulation, the cyclone does not exist on the map.
         // Show zero swath boundaries and zero swirl markers. Only origin pin is shown.
@@ -831,7 +840,13 @@
             type: "FeatureCollection",
             features: [{
                 type: "Feature",
-                properties: { name: isTsunami ? "Active Tsunami Inundation Surge" : "Active Impact Hazard Zone" },
+                properties: { 
+                    name: isTsunami ? "Active Tsunami Inundation Surge" : isFlood ? "Active Flood Water Inundation" : "Active Impact Hazard Zone",
+                    fillColor: isFlood ? (light ? "#0284c7" : "#0284c7") : undefined,
+                    strokeColor: isFlood ? (light ? "#0369a1" : "#38bdf8") : undefined,
+                    fillOpacity: isFlood ? (light ? 0.40 : 0.32) : undefined,
+                    lineWidth: isFlood ? (light ? 3.2 : 2.6) : undefined
+                },
                 geometry: {
                     type: "Polygon",
                     coordinates: [polyCoords]
@@ -841,6 +856,9 @@
         if (mapRadiusReadout) {
             if (isTsunami) {
                 mapRadiusReadout.textContent = "Ocean Surge";
+            } else if (isFlood) {
+                const radius = Number(simulationConfig.hazardRadius) || 4.2;
+                mapRadiusReadout.textContent = `${radius.toFixed(1)} km Inundation`;
             } else {
                 const radius = Number(simulationConfig.hazardRadius) || 4.2;
                 mapRadiusReadout.textContent = `${radius.toFixed(1)} km`;
@@ -1320,6 +1338,8 @@
                 mapRadiusReadout.textContent = state.hazardRadiusKm ? `${state.hazardRadiusKm.toFixed(1)} km Swath` : "C-Track Swath";
             } else if ((simulationConfig.disaster || "").toLowerCase() === "earthquake") {
                 mapRadiusReadout.textContent = state.hazardRadiusKm ? `${state.hazardRadiusKm.toFixed(1)} km (4 Zones)` : "4 Seismic Zones";
+            } else if ((simulationConfig.disaster || "").toLowerCase() === "flood") {
+                mapRadiusReadout.textContent = state.hazardRadiusKm ? `${state.hazardRadiusKm.toFixed(1)} km Inundation` : "Inundation Zone";
             } else if (state.hazardRadiusKm) {
                 mapRadiusReadout.textContent = `${state.hazardRadiusKm.toFixed(1)} km`;
             }
@@ -1344,11 +1364,13 @@
     function updateMapboxLayers(state) {
         if (!map || !map.isStyleLoaded()) return;
 
+        const light = isLightMode();
         const elapsedSec = (state.elapsedSeconds !== undefined) ? state.elapsedSeconds : ((state.simulationTime !== undefined) ? state.simulationTime : 0);
         // Active simulation check: evacuation routes, blocked roads, and cyclone swirl/swath ONLY appear after the sim starts!
         const isSimActive = isSimulationStarted || (state && state.status === "RUNNING") || (elapsedSec > 0);
         const isCyclone = (simulationConfig.disaster || "").toLowerCase() === "cyclone";
         const isEarthquake = (simulationConfig.disaster || "").toLowerCase() === "earthquake";
+        const isFlood = (simulationConfig.disaster || "").toLowerCase() === "flood";
 
         // Cyclone Swirl & Eye Marker: ONLY exists if simulation is active AND elapsedSec > 0
         if (isCyclone) {
@@ -1403,7 +1425,13 @@
                     type: "FeatureCollection",
                     features: [{
                         type: "Feature",
-                        properties: { name: isCyclone ? "Active Cyclone Swept Swath" : "Active Impact Hazard Zone" },
+                        properties: { 
+                            name: isCyclone ? "Active Cyclone Swept Swath" : isFlood ? "Active Flood Water Inundation" : "Active Impact Hazard Zone",
+                            fillColor: isFlood ? (light ? "#0284c7" : "#0284c7") : undefined,
+                            strokeColor: isFlood ? (light ? "#0369a1" : "#38bdf8") : undefined,
+                            fillOpacity: isFlood ? (light ? 0.40 : 0.32) : undefined,
+                            lineWidth: isFlood ? (light ? 3.2 : 2.6) : undefined
+                        },
                         geometry: {
                             type: "Polygon",
                             coordinates: [state.hazardPolygon]
