@@ -23,22 +23,30 @@ class TsunamiDisaster(BaseDisaster):
     def calculate_hazard_radius_km(self, elapsed_seconds: int) -> float:
         inundation = self.properties["inundationDist"]
         t = max(0.0, elapsed_seconds)
-        if t < 15: return 0.0
-        if t < 120: return round(0.5 + inundation * ((t - 15) / 105.0), 2)
-        if t < 600: return round(inundation + 0.5, 2)
-        return round((inundation + 0.5) * max(0.4, 1.0 - (t - 600) / 2400.0), 2)
+        if t < 6: return 0.0
+        if t < 18: return round(0.5 + inundation * ((t - 6) / 12.0), 2)
+        if t < 300: return round(inundation + 0.5, 2)
+        return round((inundation + 0.5) * max(0.4, 1.0 - (t - 300) / 1200.0), 2)
 
     def calculate_surge_progress(self, elapsed_seconds: int) -> float:
         """
-        Calculates oceanic surge front progression from offshore (progress ~ 0.20)
-        inland to the user's pinpoint (progress = 1.0 reached at ~60s).
+        Calculates oceanic surge front progression:
+        - t=0: Wave formation offshore in the bay (progress ~ 0.20)
+        - t=6s: Rapid oceanic wave travel, making landfall on Chennai coast (progress ~ 0.80)
+        - t=18s: Inland inundation reaches user's pinpoint (progress = 1.0)
+        - t=18-300s: Peak inundation sustained
+        - t>300s: Gradual recession
         """
         t = max(0.0, elapsed_seconds)
-        if t < 60:
-            return round(0.20 + (t / 60.0) * 0.80, 3)
-        if t < 400:
+        if t <= 0:
+            return 0.20
+        if t < 6:
+            return round(0.20 + (t / 6.0) * 0.60, 3)
+        if t < 18:
+            return round(0.80 + ((t - 6.0) / 12.0) * 0.20, 3)
+        if t < 300:
             return 1.0
-        return round(max(0.35, 1.0 - (t - 400) / 1200.0), 3)
+        return round(max(0.35, 1.0 - (t - 300) / 1200.0), 3)
 
     def evaluate_point_impact(self, lat, lng, origin_lat, origin_lng, elapsed_seconds) -> Dict[str, Any]:
         """
@@ -52,7 +60,7 @@ class TsunamiDisaster(BaseDisaster):
             return {"in_hazard_zone": False, "intensity": 0.0, "surge_height": 0.0, "blocked": False, "damage_state": "NONE"}
 
         progress = self.calculate_surge_progress(elapsed_seconds)
-        ocean_lng = max(80.42, origin_lng + 0.16)
+        ocean_lng = max(80.36, origin_lng + 0.07)
 
         # Calculate where the surge front has reached at this latitude
         y = (lat - origin_lat) / lat_span

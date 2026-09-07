@@ -52,7 +52,7 @@ def create_tsunami_inundation_polygon(
     The surge originates in the Bay of Bengal (east/right) and flows inland
     westward across the coast towards the target pinpoint.
     """
-    ocean_lng = max(80.42, target_lng + 0.16)
+    ocean_lng = max(80.36, target_lng + 0.07)
     lat_span = 0.115
     progress = max(0.05, min(1.0, progress))
 

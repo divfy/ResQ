@@ -534,7 +534,7 @@
     ------------------------------------------------------------ */
     function createTsunamiOceanicPolygon(targetLng, targetLat, progress = 1.0, numSteps = 28) {
         // Ocean boundary in Bay of Bengal (east of Chennai)
-        const oceanLng = Math.max(80.42, targetLng + 0.16);
+        const oceanLng = Math.max(80.36, targetLng + 0.07);
         const latSpan = 0.115;
         const clampedProg = Math.max(0.05, Math.min(1.0, progress));
 

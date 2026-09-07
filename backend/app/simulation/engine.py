@@ -96,7 +96,58 @@ class SimulationInstance:
         
         # 3. Aggregate Overview Metrics using Localized Population Density Zones
         zones = self.infrastructure.get("populationZones", [])
-        if zones:
+        if self.disaster == "tsunami":
+            # Tsunami directional overland inundation model:
+            # ONLY count land areas that have actually been breached by the ocean surge!
+            # The ocean has zero municipal population.
+            progress = getattr(self.hazard_model, "calculate_surge_progress", lambda s: 1.0)(self.elapsed_seconds)
+            ocean_lng = max(80.36, self.origin_lng + 0.07)
+            lat_span = 0.115
+            coast_lng = 80.292  # Coastal boundary of Chennai (Marina Beach / Royapuram)
+
+            total_affected = 0.0
+            for z in zones:
+                z_lng, z_lat = z["center"]
+                z_pop = z.get("population", 0)
+                z_area = z.get("areaKm2", 25.0)
+                z_vuln = z.get("vulnerability", 0.7)
+
+                # Check if zone is within north-south latitude span
+                lat_diff = abs(z_lat - self.origin_lat)
+                if lat_diff > lat_span:
+                    continue
+
+                # Surge front at this zone's latitude
+                y = (z_lat - self.origin_lat) / lat_span
+                inland_factor = max(0.12, (1.0 - 0.38 * (y ** 2)))
+                front_lng = ocean_lng - (ocean_lng - self.origin_lng) * progress * inland_factor
+
+                # If the front hasn't even reached the coast at this latitude, land is untouched!
+                if front_lng >= coast_lng:
+                    continue
+
+                # Approximate zone radius in degrees (~2.8 km / 111 = 0.025 deg)
+                z_radius_deg = math.sqrt(max(1.0, z_area) / math.pi) / 111.0
+                east_edge = min(coast_lng, z_lng + z_radius_deg)
+                west_edge = z_lng - z_radius_deg
+
+                # If wave front hasn't reached the zone's eastern edge, 0 impact
+                if front_lng >= east_edge:
+                    continue
+
+                # Inundation fraction across the land portion of this zone
+                if front_lng <= west_edge:
+                    inundation_frac = 1.0
+                else:
+                    inundation_frac = max(0.0, min(1.0, (east_edge - front_lng) / max(0.005, east_edge - west_edge)))
+
+                sev_factor = min(1.2, (severity / 3.0) ** 0.8)
+                zone_impact = z_pop * inundation_frac * z_vuln * sev_factor
+                total_affected += zone_impact
+
+            time_growth = 1.0 + min(0.35, max(0, self.elapsed_seconds) / 360.0)
+            affected_pop = int(total_affected * time_growth)
+        elif zones:
             total_affected = 0.0
             for z in zones:
                 z_lng, z_lat = z["center"]
@@ -141,18 +192,21 @@ class SimulationInstance:
         hosp_capacity_pct = round((used_beds / max(1, total_beds)) * 100, 1) if total_beds > 0 else 0.0
 
         # Dynamic casualties estimation (injuries + fatalities)
-        disaster_rates = {
-            "tsunami": 0.018,
-            "earthquake": 0.015,
-            "flood": 0.007,
-            "cyclone": 0.005
-        }
-        base_rate = disaster_rates.get(self.disaster.lower(), 0.008)
-        sev_multiplier = max(0.5, (severity / 3.0) ** 1.6)
-        time_growth = 0.25 + 0.75 * min(1.0, max(0, self.elapsed_seconds) / 160.0)
-        hosp_stress_factor = 1.0 + (hosp_full / max(1, len(hospitals))) * 0.4
-        road_stress_factor = 1.0 + (blocked_count / max(1, len(roads))) * 0.25
-        casualties = max(0, int(affected_pop * base_rate * sev_multiplier * time_growth * hosp_stress_factor * road_stress_factor))
+        if affected_pop == 0:
+            casualties = 0
+        else:
+            disaster_rates = {
+                "tsunami": 0.018,
+                "earthquake": 0.015,
+                "flood": 0.007,
+                "cyclone": 0.005
+            }
+            base_rate = disaster_rates.get(self.disaster.lower(), 0.008)
+            sev_multiplier = max(0.5, (severity / 3.0) ** 1.6)
+            time_growth = 0.25 + 0.75 * min(1.0, max(0, self.elapsed_seconds) / 160.0)
+            hosp_stress_factor = 1.0 + (hosp_full / max(1, len(hospitals))) * 0.4
+            road_stress_factor = 1.0 + (blocked_count / max(1, len(roads))) * 0.25
+            casualties = max(0, int(affected_pop * base_rate * sev_multiplier * time_growth * hosp_stress_factor * road_stress_factor))
 
         metrics = {
             "affectedPopulation": affected_pop,
