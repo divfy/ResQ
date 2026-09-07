@@ -1001,6 +1001,19 @@ body.light-mode .impact-divider {
     font-size: 9px;
     font-weight: 600;
     color: var(--color-critical);
+    transition: color 0.2s ease;
+}
+
+.metric-delta.delta-up {
+    color: var(--color-critical);
+}
+
+.metric-delta.delta-down {
+    color: var(--color-ok, #10b981);
+}
+
+.metric-delta.delta-neutral {
+    color: var(--text-muted);
 }
 
 .text-danger { color: var(--color-critical) !important; }

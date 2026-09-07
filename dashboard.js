@@ -52,6 +52,7 @@
     let isPaused = false;
     let currentSpeed = 1;
     let isSimulationStarted = false;
+    let previousAffectedPopulation = null;
 
     /* ============================================================
        2. DOM REFERENCES
@@ -71,6 +72,7 @@
 
     // Overview Counters & AI
     const counterAffected = document.getElementById("counterAffected");
+    const deltaAffected = document.getElementById("deltaAffected");
     const counterCasualties = document.getElementById("counterCasualties");
     const counterHospAvail = document.getElementById("counterHospAvail");
     const counterHospFull = document.getElementById("counterHospFull");
@@ -1380,6 +1382,30 @@
         // 1. Overview Counters (Animated Ticks)
         if (state.metrics) {
             animateValue(counterAffected, state.metrics.affectedPopulation);
+            if (deltaAffected && state.metrics.affectedPopulation !== undefined) {
+                const currentAff = state.metrics.affectedPopulation;
+                if (previousAffectedPopulation !== null && previousAffectedPopulation > 0) {
+                    const diff = currentAff - previousAffectedPopulation;
+                    const delta = (diff / previousAffectedPopulation) * 100;
+                    if (delta > 0.05) {
+                        deltaAffected.textContent = `↑ ${delta.toFixed(1)}%`;
+                        deltaAffected.className = "metric-delta delta-up";
+                    } else if (delta < -0.05) {
+                        deltaAffected.textContent = `↓ ${Math.abs(delta).toFixed(1)}%`;
+                        deltaAffected.className = "metric-delta delta-down";
+                    } else {
+                        deltaAffected.textContent = `— 0.0%`;
+                        deltaAffected.className = "metric-delta delta-neutral";
+                    }
+                } else if (currentAff > 0) {
+                    deltaAffected.textContent = `↑ ACTIVE`;
+                    deltaAffected.className = "metric-delta delta-up";
+                } else {
+                    deltaAffected.textContent = `— 0.0%`;
+                    deltaAffected.className = "metric-delta delta-neutral";
+                }
+                previousAffectedPopulation = currentAff;
+            }
             if (counterCasualties && state.metrics.casualties !== undefined) {
                 animateValue(counterCasualties, state.metrics.casualties);
             }
@@ -1700,6 +1726,11 @@
             if (btnStartSim) {
                 btnStartSim.style.opacity = "1";
                 btnStartSim.innerHTML = `<span class="btn-icon">▶</span><span class="btn-text">START SIMULATION</span>`;
+            }
+            previousAffectedPopulation = null;
+            if (deltaAffected) {
+                deltaAffected.textContent = "— 0.0%";
+                deltaAffected.className = "metric-delta delta-neutral";
             }
             applySimulationState(resetState);
             updatePropertySliderInputs();
