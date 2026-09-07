@@ -176,6 +176,7 @@
     let poiMarkers = [];
     let latestSimulationState = null;
     let cachedCityData = null;
+    let evacRouteEventsAttached = false;
     const layerVisibility = {
         roads: true,
         evac: true,
@@ -243,16 +244,26 @@
 
     function updateMapThemeStyle() {
         if (!map) return;
-        const style = getTileStyle(isLightMode());
-        map.setStyle(style);
-        map.once("style.load", async () => {
-            await loadStaticCityInfrastructure();
-            setupDisasterLayers();
-            setupOriginMarker();
-            if (latestSimulationState) {
-                updateMapboxLayers(latestSimulationState);
+        const newStyle = getTileStyle(isLightMode());
+
+        const reapplyMapData = async () => {
+            try {
+                await loadStaticCityInfrastructure();
+                setupDisasterLayers();
+                setupOriginMarker();
+                if (latestSimulationState) {
+                    updateMapboxLayers(latestSimulationState);
+                } else {
+                    updatePreviewHazardPolygon();
+                }
+            } catch (err) {
+                console.warn("[RESQ] Error applying layers after theme switch:", err);
             }
-        });
+        };
+
+        // Attach style.load listener before invoking setStyle to prevent race conditions
+        map.once("style.load", reapplyMapData);
+        map.setStyle(newStyle);
     }
 
     /* ------------------------------------------------------------
@@ -291,17 +302,34 @@
                         "line-cap": "round"
                     },
                     paint: {
-                        "line-color": isLightMode() ? "#94a3b8" : "#334155",
-                        "line-width": 2.5,
-                        "line-opacity": 0.6
+                        "line-color": isLightMode() ? "#64748b" : "#334155",
+                        "line-width": isLightMode() ? 2.8 : 2.5,
+                        "line-opacity": isLightMode() ? 0.75 : 0.6
                     }
                 });
+            } else if (map.getLayer("osm-roads-base")) {
+                map.setPaintProperty("osm-roads-base", "line-color", isLightMode() ? "#64748b" : "#334155");
+                map.setPaintProperty("osm-roads-base", "line-width", isLightMode() ? 2.8 : 2.5);
+                map.setPaintProperty("osm-roads-base", "line-opacity", isLightMode() ? 0.75 : 0.6);
             }
 
             // 2. 3D Buildings from OSM disabled to remove greyish black boxes
 
             // 3. Spawn POI markers for Hospitals, Shelters, and Power Grid
             spawnInfrastructurePOIMarkers(cityData.pois.features);
+
+            // Reapply pill visibility filters to newly created POI markers
+            ["hospitals", "shelters", "outages"].forEach(poiKey => {
+                if (layerVisibility[poiKey] === false) {
+                    const targetType = poiKey === "hospitals" ? "hospital" : poiKey === "shelters" ? "shelter" : "outage";
+                    poiMarkers.forEach(m => {
+                        const el = m.getElement();
+                        if (el && el.dataset.poiType === targetType) {
+                            el.style.display = "none";
+                        }
+                    });
+                }
+            });
 
         } catch (err) {
             console.warn("[RESQ] Could not fetch city map infrastructure:", err);
@@ -537,36 +565,39 @@
                 }
             });
 
-            // Interactive inspection on evacuation corridors
-            map.on("click", "evac-routes-line", (e) => {
-                const f = e.features && e.features[0];
-                if (!f) return;
-                const props = f.properties || {};
-                const fromZone = props.fromZone ? `Threat Zone: <b>${props.fromZone}</b><br>` : "";
-                const toShelter = props.toShelter ? `Safe Destination: <b>${props.toShelter}</b><br>` : "";
-                const dist = props.distanceKm ? `Corridor Distance: <b>${props.distanceKm} km</b><br>` : "";
-                new maplibregl.Popup({ offset: [0, -10], closeButton: true })
-                    .setLngLat(e.lngLat)
-                    .setHTML(`
-                        <div style="font-family: 'DM Mono', monospace; font-size: 11px; padding: 6px 8px; color: #0284c7; min-width: 190px;">
-                            <div style="font-weight: 700; font-size: 12px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-                                <span>🛡️</span> <span>EVACUATION CORRIDOR</span>
+            // Interactive inspection on evacuation corridors (attached once to prevent duplicates)
+            if (!evacRouteEventsAttached) {
+                evacRouteEventsAttached = true;
+                map.on("click", "evac-routes-line", (e) => {
+                    const f = e.features && e.features[0];
+                    if (!f) return;
+                    const props = f.properties || {};
+                    const fromZone = props.fromZone ? `Threat Zone: <b>${props.fromZone}</b><br>` : "";
+                    const toShelter = props.toShelter ? `Safe Destination: <b>${props.toShelter}</b><br>` : "";
+                    const dist = props.distanceKm ? `Corridor Distance: <b>${props.distanceKm} km</b><br>` : "";
+                    new maplibregl.Popup({ offset: [0, -10], closeButton: true })
+                        .setLngLat(e.lngLat)
+                        .setHTML(`
+                            <div style="font-family: 'DM Mono', monospace; font-size: 11px; padding: 6px 8px; color: #0284c7; min-width: 190px;">
+                                <div style="font-weight: 700; font-size: 12px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                                    <span>🛡️</span> <span>EVACUATION CORRIDOR</span>
+                                </div>
+                                <div style="color: #475569; line-height: 1.5; font-size: 10px;">
+                                    ${fromZone}${toShelter}${dist}
+                                    Status: <span style="color: #10b981; font-weight: 700;">ACTIVE ESCAPE ROUTE</span>
+                                </div>
                             </div>
-                            <div style="color: #475569; line-height: 1.5; font-size: 10px;">
-                                ${fromZone}${toShelter}${dist}
-                                Status: <span style="color: #10b981; font-weight: 700;">ACTIVE ESCAPE ROUTE</span>
-                            </div>
-                        </div>
-                    `)
-                    .addTo(map);
-            });
+                        `)
+                        .addTo(map);
+                });
 
-            map.on("mouseenter", "evac-routes-line", () => {
-                map.getCanvas().style.cursor = "pointer";
-            });
-            map.on("mouseleave", "evac-routes-line", () => {
-                map.getCanvas().style.cursor = "";
-            });
+                map.on("mouseenter", "evac-routes-line", () => {
+                    map.getCanvas().style.cursor = "pointer";
+                });
+                map.on("mouseleave", "evac-routes-line", () => {
+                    map.getCanvas().style.cursor = "";
+                });
+            }
         }
 
         // Reapply current active simulation data or initial preview
@@ -580,6 +611,21 @@
             if (map.getSource("blocked-roads-source")) {
                 map.getSource("blocked-roads-source").setData({ type: "FeatureCollection", features: [] });
             }
+        }
+
+        // Restore pill toggle visibility states for newly added layers
+        if (!layerVisibility.roads) {
+            if (map.getLayer("blocked-roads-casing")) map.setLayoutProperty("blocked-roads-casing", "visibility", "none");
+            if (map.getLayer("blocked-roads-line")) map.setLayoutProperty("blocked-roads-line", "visibility", "none");
+        }
+        if (!layerVisibility.evac) {
+            if (map.getLayer("evac-routes-glow")) map.setLayoutProperty("evac-routes-glow", "visibility", "none");
+            if (map.getLayer("evac-routes-casing")) map.setLayoutProperty("evac-routes-casing", "visibility", "none");
+            if (map.getLayer("evac-routes-line")) map.setLayoutProperty("evac-routes-line", "visibility", "none");
+        }
+        if (!layerVisibility.hazard) {
+            if (map.getLayer("hazard-fill")) map.setLayoutProperty("hazard-fill", "visibility", "none");
+            if (map.getLayer("hazard-line")) map.setLayoutProperty("hazard-line", "visibility", "none");
         }
     }
 
@@ -1393,7 +1439,7 @@
     }
 
     function updateMapboxLayers(state) {
-        if (!map || !map.isStyleLoaded()) return;
+        if (!map) return;
 
         const light = isLightMode();
         const elapsedSec = (state.elapsedSeconds !== undefined) ? state.elapsedSeconds : ((state.simulationTime !== undefined) ? state.simulationTime : 0);
@@ -1668,6 +1714,7 @@
             if (map.getLayer("blocked-roads-casing")) map.setLayoutProperty("blocked-roads-casing", "visibility", isActive ? "visible" : "none");
             if (map.getLayer("blocked-roads-line")) map.setLayoutProperty("blocked-roads-line", "visibility", isActive ? "visible" : "none");
         } else if (layerKey === "evac") {
+            if (map.getLayer("evac-routes-glow")) map.setLayoutProperty("evac-routes-glow", "visibility", isActive ? "visible" : "none");
             if (map.getLayer("evac-routes-casing")) map.setLayoutProperty("evac-routes-casing", "visibility", isActive ? "visible" : "none");
             if (map.getLayer("evac-routes-line")) map.setLayoutProperty("evac-routes-line", "visibility", isActive ? "visible" : "none");
         } else if (layerKey === "hazard") {
