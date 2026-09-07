@@ -149,11 +149,18 @@
     updateOriginReadout(currentOrigin.latitude, currentOrigin.longitude);
 
     function updateOriginReadout(lat, lng) {
-        const latDir = lat >= 0 ? "N" : "S";
-        const lngDir = lng >= 0 ? "E" : "W";
-        const readout = `${Math.abs(lat).toFixed(4)}° ${latDir} / ${Math.abs(lng).toFixed(4)}° ${lngDir}`;
+        const latNum = Number(lat);
+        const lngNum = Number(lng);
+        const latDir = latNum >= 0 ? "N" : "S";
+        const lngDir = lngNum >= 0 ? "E" : "W";
+        const readout = `${Math.abs(latNum).toFixed(4)}° ${latDir} / ${Math.abs(lngNum).toFixed(4)}° ${lngDir}`;
         if (mapCoordsReadout) mapCoordsReadout.textContent = readout;
-        if (originCoordsVal) originCoordsVal.textContent = readout;
+        if (originCoordsVal) {
+            originCoordsVal.textContent = readout;
+            originCoordsVal.classList.remove("coords-established-flash");
+            void originCoordsVal.offsetWidth;
+            originCoordsVal.classList.add("coords-established-flash");
+        }
     }
 
     /* ============================================================
@@ -169,6 +176,7 @@
         hospitals: true,
         shelters: true,
         outages: true,
+        origin: true,
     };
 
     function getTileStyle(light) {
@@ -413,22 +421,173 @@
                 }
             });
         }
+
+        // Preview initial hazard envelope centered around origin
+        updatePreviewHazardPolygon();
     }
 
     /* ------------------------------------------------------------
-       INTERACTIVE ORIGIN SELECTION
+       HAZARD ENVELOPE PREVIEW GENERATOR
+    ------------------------------------------------------------ */
+    function createHazardCirclePolygon(centerLng, centerLat, radiusKm = 4.2, numPoints = 36) {
+        const coords = [];
+        const latDegPerKm = 1.0 / 110.574;
+        const lonDegPerKm = 1.0 / (111.320 * Math.cos(centerLat * Math.PI / 180.0));
+
+        for (let i = 0; i <= numPoints; i++) {
+            const angle = (i / numPoints) * 2.0 * Math.PI;
+            const variance = 1.0 + 0.10 * Math.sin(angle * 3.0) + 0.06 * Math.cos(angle * 2.0);
+            const r = radiusKm * variance;
+            const ptLat = centerLat + (Math.sin(angle) * r * latDegPerKm);
+            const ptLon = centerLng + (Math.cos(angle) * r * lonDegPerKm);
+            coords.push([Number(ptLon.toFixed(6)), Number(ptLat.toFixed(6))]);
+        }
+        return coords;
+    }
+
+    function updatePreviewHazardPolygon() {
+        if (!map || !map.getSource("hazard-source")) return;
+        const radius = Number(simulationConfig.hazardRadius) || 4.2;
+        const polyCoords = createHazardCirclePolygon(currentOrigin.longitude, currentOrigin.latitude, radius);
+        map.getSource("hazard-source").setData({
+            type: "FeatureCollection",
+            features: [{
+                type: "Feature",
+                properties: { name: "Active Impact Hazard Zone" },
+                geometry: {
+                    type: "Polygon",
+                    coordinates: [polyCoords]
+                }
+            }]
+        });
+        if (mapRadiusReadout) {
+            mapRadiusReadout.textContent = `${radius.toFixed(1)} km`;
+        }
+    }
+
+    /* ------------------------------------------------------------
+       INTERACTIVE ORIGIN POINTER (EPICENTER BEACON)
     ------------------------------------------------------------ */
     function setupOriginMarker() {
-        if (originMarker) originMarker.remove();
+        if (originMarker) {
+            originMarker.remove();
+            originMarker = null;
+        }
 
         const el = document.createElement("div");
-        el.className = "marker-origin";
-        el.innerHTML = "<span>🎯</span>";
-        el.title = `Hazard Epicenter: ${currentOrigin.latitude.toFixed(4)}° N, ${currentOrigin.longitude.toFixed(4)}° E`;
+        el.className = "marker-origin-container";
+        el.id = "hazardOriginMarker";
+        
+        const disasterLabel = (simulationConfig.disaster || "HAZARD").toUpperCase();
 
-        originMarker = new maplibregl.Marker({ element: el })
+        el.innerHTML = `
+            <div class="origin-radar-ping ping-1"></div>
+            <div class="origin-radar-ping ping-2"></div>
+            <div class="origin-radar-ping ping-3"></div>
+            <div class="origin-pin-wrapper origin-drop-anim">
+                <div class="origin-pin-badge">
+                    <span class="badge-dot"></span>
+                    <span class="badge-text">${disasterLabel} ORIGIN</span>
+                </div>
+                <div class="origin-pointer-body">
+                    <svg class="origin-pointer-svg" viewBox="0 0 36 50" width="36" height="50" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <filter id="originGlow" x="-30%" y="-30%" width="160%" height="160%">
+                                <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#ef4444" flood-opacity="0.9"/>
+                            </filter>
+                            <linearGradient id="pinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#ff4444"/>
+                                <stop offset="100%" stop-color="#b91c1c"/>
+                            </linearGradient>
+                        </defs>
+                        <!-- Ground shadow ellipse -->
+                        <ellipse cx="18" cy="48" rx="7" ry="2.5" fill="rgba(0,0,0,0.55)"/>
+                        <!-- Teardrop pointer body with sharp needle tip -->
+                        <path d="M18 48 C 18 48, 3 31, 3 18 C 3 9.715, 9.715 3, 18 3 C 26.285 3, 33 9.715, 33 18 C 33 31, 18 48, 18 48 Z" 
+                              fill="url(#pinGrad)" stroke="#ffffff" stroke-width="2.5" filter="url(#originGlow)"/>
+                        <!-- Central tactical reticle rings -->
+                        <circle cx="18" cy="18" r="9" fill="#0d1117" stroke="#ffffff" stroke-width="1.5"/>
+                        <circle cx="18" cy="18" r="6" fill="#facc15"/>
+                        <circle cx="18" cy="18" r="2.5" fill="#ef4444"/>
+                        <line x1="18" y1="5" x2="18" y2="9" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+                        <line x1="18" y1="27" x2="18" y2="31" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+                        <line x1="5" y1="18" x2="9" y2="18" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+                        <line x1="27" y1="18" x2="31" y2="18" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="origin-target-crosshair"></div>
+            </div>
+        `;
+
+        el.title = `Hazard Origin: ${currentOrigin.latitude.toFixed(4)}° N, ${currentOrigin.longitude.toFixed(4)}° E`;
+
+        const popup = new maplibregl.Popup({
+            offset: [0, -54],
+            closeButton: false,
+            className: "origin-map-popup"
+        }).setHTML(`
+            <div class="origin-popup-content">
+                <div class="origin-popup-title">🎯 ${disasterLabel} EPICENTER</div>
+                <div class="origin-popup-coords">${currentOrigin.latitude.toFixed(4)}° N, ${currentOrigin.longitude.toFixed(4)}° E</div>
+                <div class="origin-popup-note">Point of Origin Active</div>
+            </div>
+        `);
+
+        originMarker = new maplibregl.Marker({
+            element: el,
+            anchor: "bottom",
+            offset: [0, 0]
+        })
             .setLngLat([currentOrigin.longitude, currentOrigin.latitude])
+            .setPopup(popup)
             .addTo(map);
+
+        el.addEventListener("mouseenter", () => {
+            if (originMarker && originMarker.getPopup() && !originMarker.getPopup().isOpen()) {
+                originMarker.togglePopup();
+            }
+        });
+        el.addEventListener("mouseleave", () => {
+            if (originMarker && originMarker.getPopup() && originMarker.getPopup().isOpen()) {
+                originMarker.togglePopup();
+            }
+        });
+    }
+
+    function triggerOriginDropAnimation() {
+        const el = originMarker?.getElement();
+        if (!el) return;
+        const wrapper = el.querySelector(".origin-pin-wrapper");
+        if (wrapper) {
+            wrapper.classList.remove("origin-drop-anim");
+            void wrapper.offsetWidth; // trigger reflow
+            wrapper.classList.add("origin-drop-anim");
+        }
+    }
+
+    function showOriginEstablishedToast(lat, lng) {
+        let toast = document.getElementById("originEstablishedToast");
+        if (!toast) {
+            toast = document.createElement("div");
+            toast.id = "originEstablishedToast";
+            toast.className = "origin-established-toast";
+            mapContainer.appendChild(toast);
+        }
+        const disasterLabel = (simulationConfig.disaster || "HAZARD").toUpperCase();
+        toast.innerHTML = `
+            <div class="toast-inner">
+                <span class="toast-icon">📍</span>
+                <div>
+                    <div class="toast-title">POINT OF ORIGIN ESTABLISHED</div>
+                    <div class="toast-coords">${disasterLabel} EPICENTER: ${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E</div>
+                </div>
+            </div>
+        `;
+        toast.classList.add("show");
+        clearTimeout(toast._timer);
+        toast._timer = setTimeout(() => {
+            toast.classList.remove("show");
+        }, 3200);
     }
 
     function setupOriginClickInteraction() {
@@ -453,8 +612,33 @@
             currentOrigin = { latitude: newLat, longitude: newLng };
             updateOriginReadout(newLat, newLng);
 
-            if (originMarker) {
+            if (!originMarker) {
+                setupOriginMarker();
+            } else {
                 originMarker.setLngLat([newLng, newLat]);
+                const el = originMarker.getElement();
+                if (el) {
+                    el.title = `Hazard Origin: ${newLat.toFixed(4)}° N, ${newLng.toFixed(4)}° E`;
+                }
+                const popup = originMarker.getPopup();
+                if (popup) {
+                    popup.setHTML(`
+                        <div class="origin-popup-content">
+                            <div class="origin-popup-title">🎯 ${(simulationConfig.disaster || "HAZARD").toUpperCase()} EPICENTER</div>
+                            <div class="origin-popup-coords">${newLat.toFixed(4)}° N, ${newLng.toFixed(4)}° E</div>
+                            <div class="origin-popup-note">Point of Origin Established</div>
+                        </div>
+                    `);
+                }
+            }
+
+            // Visual feedback: Drop animation + Toast banner
+            triggerOriginDropAnimation();
+            showOriginEstablishedToast(newLat, newLng);
+
+            // Update hazard envelope preview around new origin if not running live stream
+            if (!simulationId || isPaused) {
+                updatePreviewHazardPolygon();
             }
 
             // Sync with backend scenario and simulation
@@ -477,7 +661,9 @@
             btnSetOrigin.classList.remove("active");
             mapContainer.classList.remove("selecting-origin");
             if (btnSetOriginText) btnSetOriginText.textContent = "SET ORIGIN ON MAP";
-            if (originSelectionHint) originSelectionHint.textContent = "Origin updated! Ready to simulate.";
+            if (originSelectionHint) {
+                originSelectionHint.innerHTML = `<span style="color: #10b981; font-weight: 600;">✓ Origin pointer established at ${newLat.toFixed(4)}° N, ${newLng.toFixed(4)}° E</span>`;
+            }
         });
     }
 
@@ -854,6 +1040,9 @@
         } else if (layerKey === "hazard") {
             if (map.getLayer("hazard-fill")) map.setLayoutProperty("hazard-fill", "visibility", isActive ? "visible" : "none");
             if (map.getLayer("hazard-line")) map.setLayoutProperty("hazard-line", "visibility", isActive ? "visible" : "none");
+        } else if (layerKey === "origin") {
+            const el = originMarker?.getElement();
+            if (el) el.style.display = isActive ? "flex" : "none";
         } else if (layerKey === "hospitals" || layerKey === "shelters" || layerKey === "outages") {
             poiMarkers.forEach(m => {
                 const el = m.getElement();

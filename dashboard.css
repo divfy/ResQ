@@ -158,13 +158,13 @@ html.light-mode .dash-navbar , body.light-mode .dash-navbar {
 .nav-brand {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
 }
 
 .logo {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 0;
     text-decoration: none;
     color: inherit;
 }
@@ -195,7 +195,7 @@ html.light-mode .logo-mark span , body.light-mode .logo-mark span {
 .logo-text {
     font-size: 15px;
     font-weight: 800;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.02em;
 }
 
 .brand-divider {
@@ -1419,23 +1419,309 @@ html.light-mode .origin-control-bar , body.light-mode .origin-control-bar {
     cursor: crosshair !important;
 }
 
-.marker-origin {
-    width: 28px;
-    height: 28px;
-    background: radial-gradient(circle, #ef4444 30%, rgba(239, 68, 68, 0.2) 70%);
-    border: 2px solid #fff;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    font-size: 13px;
-    box-shadow: 0 0 16px #ef4444;
-    animation: pulseEpicenter 1.5s infinite;
+/* ============================================================
+   INTERACTIVE ORIGIN POINTER (EPICENTER BEACON)
+============================================================ */
+
+/* MapLibre marker container: MUST NOT have CSS transform! */
+.marker-origin-container {
+    width: 48px;
+    height: 64px;
+    position: relative;
+    pointer-events: auto;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    user-select: none;
 }
 
-@keyframes pulseEpicenter {
-    0% { transform: scale(0.9); box-shadow: 0 0 8px #ef4444; }
-    50% { transform: scale(1.15); box-shadow: 0 0 22px rgba(239, 68, 68, 0.8); }
-    100% { transform: scale(0.9); box-shadow: 0 0 8px #ef4444; }
+/* Base radar waves expanding from the coordinate origin on the ground */
+.origin-radar-ping {
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 24px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid #ef4444;
+    background: rgba(239, 68, 68, 0.25);
+    pointer-events: none;
+    animation: originRadarPing 2s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+.origin-radar-ping.ping-2 {
+    animation-delay: 0.65s;
+}
+
+.origin-radar-ping.ping-3 {
+    animation-delay: 1.3s;
+}
+
+@keyframes originRadarPing {
+    0% {
+        width: 14px;
+        height: 7px;
+        opacity: 0.95;
+        border-color: #ef4444;
+        box-shadow: 0 0 12px #ef4444;
+    }
+    100% {
+        width: 84px;
+        height: 42px;
+        opacity: 0;
+        border-color: #f59e0b;
+        box-shadow: 0 0 20px rgba(245, 158, 11, 0);
+    }
+}
+
+/* Pin wrapper holding the badge and pointer body */
+.origin-pin-wrapper {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.65));
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.marker-origin-container:hover .origin-pin-wrapper {
+    transform: translateY(-4px) scale(1.08);
+}
+
+/* High-tech tactical label badge floating over pointer */
+.origin-pin-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #0f172a;
+    border: 1.5px solid #ef4444;
+    color: #fef2f2;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6), 0 0 8px rgba(239, 68, 68, 0.4);
+    margin-bottom: 2px;
+    white-space: nowrap;
+}
+
+.origin-pin-badge .badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ef4444;
+    box-shadow: 0 0 6px #ef4444;
+    animation: originBlink 1s infinite alternate;
+}
+
+@keyframes originBlink {
+    0% { opacity: 0.4; }
+    100% { opacity: 1; }
+}
+
+/* Pointer SVG styling */
+.origin-pointer-body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    line-height: 0;
+}
+
+.origin-pointer-svg {
+    display: block;
+    overflow: visible;
+}
+
+/* Ground target point dot */
+.origin-target-crosshair {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 1.5px solid #ef4444;
+    position: absolute;
+    bottom: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    box-shadow: 0 0 8px #ef4444;
+}
+
+/* Placement Drop / Impact Animation */
+.origin-drop-anim {
+    animation: originDropImpact 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+}
+
+@keyframes originDropImpact {
+    0% {
+        transform: translateY(-45px) scale(1.35);
+        opacity: 0;
+    }
+    60% {
+        transform: translateY(4px) scale(0.96);
+        opacity: 1;
+    }
+    80% {
+        transform: translateY(-2px) scale(1.02);
+    }
+    100% {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+/* Custom Tactical Popup for Origin Marker */
+.origin-map-popup .maplibregl-popup-content {
+    background: #0d1117 !important;
+    border: 1px solid #ef4444 !important;
+    border-radius: 6px !important;
+    padding: 8px 12px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 16px rgba(239, 68, 68, 0.3) !important;
+}
+
+.origin-map-popup .maplibregl-popup-tip {
+    border-top-color: #ef4444 !important;
+}
+
+.origin-popup-content {
+    font-family: 'DM Mono', monospace;
+    text-align: center;
+}
+
+.origin-popup-title {
+    color: #ef4444;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    margin-bottom: 2px;
+}
+
+.origin-popup-coords {
+    color: #f3f4f6;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.origin-popup-note {
+    color: #9ca3af;
+    font-size: 9px;
+    margin-top: 2px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+/* HUD Toast when origin is established */
+.origin-established-toast {
+    position: absolute;
+    top: 64px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    background: rgba(13, 17, 23, 0.95);
+    border: 1.5px solid #10b981;
+    border-radius: 8px;
+    padding: 8px 18px;
+    color: #f3f4f6;
+    font-family: 'DM Mono', monospace;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(16, 185, 129, 0.3);
+    backdrop-filter: blur(8px);
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.origin-established-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.origin-established-toast .toast-inner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.origin-established-toast .toast-icon {
+    font-size: 20px;
+}
+
+.origin-established-toast .toast-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #10b981;
+    letter-spacing: 0.06em;
+}
+
+.origin-established-toast .toast-coords {
+    font-size: 11px;
+    color: #d1d5db;
+    margin-top: 1px;
+}
+
+/* Flash animation for coordinates readout */
+.coords-established-flash {
+    animation: flashCoordsHighlight 1.5s ease-out;
+}
+
+@keyframes flashCoordsHighlight {
+    0% {
+        background-color: rgba(16, 185, 129, 0.35);
+        color: #ffffff;
+        box-shadow: 0 0 14px rgba(16, 185, 129, 0.6);
+        border-color: #10b981;
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
+/* Light Mode Overrides for Origin Pointer */
+html.light-mode .origin-pin-badge,
+body.light-mode .origin-pin-badge {
+    background: #ffffff;
+    color: #111827;
+    border-color: #dc2626;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15), 0 0 8px rgba(220, 38, 38, 0.2);
+}
+
+html.light-mode .origin-map-popup .maplibregl-popup-content,
+body.light-mode .origin-map-popup .maplibregl-popup-content {
+    background: #ffffff !important;
+    border-color: #dc2626 !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2), 0 0 16px rgba(220, 38, 38, 0.2) !important;
+}
+
+html.light-mode .origin-map-popup .maplibregl-popup-tip,
+body.light-mode .origin-map-popup .maplibregl-popup-tip {
+    border-top-color: #dc2626 !important;
+}
+
+html.light-mode .origin-popup-coords,
+body.light-mode .origin-popup-coords {
+    color: #111827;
+}
+
+html.light-mode .origin-established-toast,
+body.light-mode .origin-established-toast {
+    background: rgba(255, 255, 255, 0.96);
+    color: #111827;
+    border-color: #1f6b3a;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15), 0 0 20px rgba(31, 107, 58, 0.2);
+}
+
+html.light-mode .origin-established-toast .toast-title,
+body.light-mode .origin-established-toast .toast-title {
+    color: #1f6b3a;
+}
+
+html.light-mode .origin-established-toast .toast-coords,
+body.light-mode .origin-established-toast .toast-coords {
+    color: #374151;
 }
 
 .marker-hospital-full {
