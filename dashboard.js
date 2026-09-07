@@ -365,6 +365,36 @@
     function setupDisasterLayers() {
         if (!map) return;
         const light = isLightMode();
+        const isTsunami = (simulationConfig.disaster || "").toLowerCase() === "tsunami";
+
+        // Tsunami: ocean surge translucent water blue with vivid cyan/white wavecrest border
+        // Other disasters (flood, cyclone, earthquake): tactical amber
+        const hazardFillColor = isTsunami
+            ? (light ? "#0284c7" : "#0369a1")
+            : (light ? "#d97706" : "#f59e0b");
+        const hazardFillOpacity = isTsunami
+            ? (light ? 0.45 : 0.38)
+            : (light ? 0.35 : 0.22);
+        const hazardLineColor = isTsunami
+            ? (light ? "#0284c7" : "#38bdf8")
+            : (light ? "#b45309" : "#f59e0b");
+        const hazardLineWidth = isTsunami ? (light ? 3.5 : 2.8) : (light ? 3.0 : 2.0);
+        const hazardDashArray = isTsunami ? [4, 1] : [3, 2];
+
+        // Update Legend Pill Indicator
+        const legendHazardInd = document.getElementById("legendHazardIndicator");
+        const legendHazardTxt = document.getElementById("legendHazardText");
+        if (legendHazardInd) {
+            if (isTsunami) {
+                legendHazardInd.classList.remove("yellow-box");
+                legendHazardInd.classList.add("blue-box");
+                if (legendHazardTxt) legendHazardTxt.textContent = "TSUNAMI SURGE";
+            } else {
+                legendHazardInd.classList.remove("blue-box");
+                legendHazardInd.classList.add("yellow-box");
+                if (legendHazardTxt) legendHazardTxt.textContent = "HAZARD ZONE";
+            }
+        }
 
         // 1. Hazard Polygon Overlay
         if (!map.getSource("hazard-source")) {
@@ -378,8 +408,8 @@
                 source: "hazard-source",
                 type: "fill",
                 paint: {
-                    "fill-color": light ? "#d97706" : "#f59e0b",
-                    "fill-opacity": light ? 0.35 : 0.22
+                    "fill-color": hazardFillColor,
+                    "fill-opacity": hazardFillOpacity
                 }
             });
 
@@ -388,11 +418,21 @@
                 source: "hazard-source",
                 type: "line",
                 paint: {
-                    "line-color": light ? "#b45309" : "#f59e0b",
-                    "line-width": light ? 3.0 : 2.0,
-                    "line-dasharray": [3, 2]
+                    "line-color": hazardLineColor,
+                    "line-width": hazardLineWidth,
+                    "line-dasharray": hazardDashArray
                 }
             });
+        } else {
+            if (map.getLayer("hazard-fill")) {
+                map.setPaintProperty("hazard-fill", "fill-color", hazardFillColor);
+                map.setPaintProperty("hazard-fill", "fill-opacity", hazardFillOpacity);
+            }
+            if (map.getLayer("hazard-line")) {
+                map.setPaintProperty("hazard-line", "line-color", hazardLineColor);
+                map.setPaintProperty("hazard-line", "line-width", hazardLineWidth);
+                map.setPaintProperty("hazard-line", "line-dasharray", hazardDashArray);
+            }
         }
 
         // 2. Blocked Roads (Dual-layer: High-contrast dark casing + vivid red core)
@@ -492,6 +532,33 @@
     /* ------------------------------------------------------------
        HAZARD ENVELOPE PREVIEW GENERATOR
     ------------------------------------------------------------ */
+    function createTsunamiOceanicPolygon(targetLng, targetLat, progress = 1.0, numSteps = 28) {
+        // Ocean boundary in Bay of Bengal (east of Chennai)
+        const oceanLng = Math.max(80.42, targetLng + 0.16);
+        const latSpan = 0.115;
+        const clampedProg = Math.max(0.05, Math.min(1.0, progress));
+
+        const coords = [];
+        // 1. Northeast corner anchored in ocean
+        coords.push([Number(oceanLng.toFixed(6)), Number((targetLat + latSpan).toFixed(6))]);
+        // 2. Southeast corner anchored in ocean
+        coords.push([Number(oceanLng.toFixed(6)), Number((targetLat - latSpan).toFixed(6))]);
+
+        // 3. Wave surge front advancing westward from South to North
+        for (let i = 0; i <= numSteps; i++) {
+            const y = -1.0 + 2.0 * i / numSteps;
+            const ptLat = Number((targetLat + y * latSpan).toFixed(6));
+            // Parabolic apex at y=0 (targetLat) with subtle coastal wave perturbation
+            const inlandFactor = Math.max(0.12, (1.0 - 0.38 * (y * y)) + 0.012 * Math.sin(y * 5.0 * Math.PI));
+            const ptLng = Number((oceanLng - (oceanLng - targetLng) * clampedProg * inlandFactor).toFixed(6));
+            coords.push([ptLng, ptLat]);
+        }
+
+        // 4. Close polygon back to first corner
+        coords.push(coords[0]);
+        return coords;
+    }
+
     function createHazardCirclePolygon(centerLng, centerLat, radiusKm = 4.2, numPoints = 36) {
         const coords = [];
         const latDegPerKm = 1.0 / 110.574;
@@ -510,13 +577,20 @@
 
     function updatePreviewHazardPolygon() {
         if (!map || !map.getSource("hazard-source")) return;
-        const radius = Number(simulationConfig.hazardRadius) || 4.2;
-        const polyCoords = createHazardCirclePolygon(currentOrigin.longitude, currentOrigin.latitude, radius);
+        const isTsunami = (simulationConfig.disaster || "").toLowerCase() === "tsunami";
+        let polyCoords;
+        if (isTsunami) {
+            polyCoords = createTsunamiOceanicPolygon(currentOrigin.longitude, currentOrigin.latitude, 1.0);
+        } else {
+            const radius = Number(simulationConfig.hazardRadius) || 4.2;
+            polyCoords = createHazardCirclePolygon(currentOrigin.longitude, currentOrigin.latitude, radius);
+        }
+
         map.getSource("hazard-source").setData({
             type: "FeatureCollection",
             features: [{
                 type: "Feature",
-                properties: { name: "Active Impact Hazard Zone" },
+                properties: { name: isTsunami ? "Active Tsunami Inundation Surge" : "Active Impact Hazard Zone" },
                 geometry: {
                     type: "Polygon",
                     coordinates: [polyCoords]
@@ -524,7 +598,12 @@
             }]
         });
         if (mapRadiusReadout) {
-            mapRadiusReadout.textContent = `${radius.toFixed(1)} km`;
+            if (isTsunami) {
+                mapRadiusReadout.textContent = "Ocean Surge";
+            } else {
+                const radius = Number(simulationConfig.hazardRadius) || 4.2;
+                mapRadiusReadout.textContent = `${radius.toFixed(1)} km`;
+            }
         }
     }
 
@@ -901,8 +980,12 @@
         }
 
         // 4. Map Telemetry Radius
-        if (mapRadiusReadout && state.hazardRadiusKm) {
-            mapRadiusReadout.textContent = `${state.hazardRadiusKm.toFixed(1)} km`;
+        if (mapRadiusReadout) {
+            if ((simulationConfig.disaster || "").toLowerCase() === "tsunami") {
+                mapRadiusReadout.textContent = "Ocean Surge";
+            } else if (state.hazardRadiusKm) {
+                mapRadiusReadout.textContent = `${state.hazardRadiusKm.toFixed(1)} km`;
+            }
         }
 
         // Track simulation active state

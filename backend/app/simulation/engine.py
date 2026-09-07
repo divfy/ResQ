@@ -7,7 +7,11 @@ import math
 from typing import Dict, Any, List, Optional, Set
 from ..geospatial.osm import OSMLoader
 from ..geospatial.routing import RoadNetwork
-from ..geospatial.spatial import create_hazard_circle_polygon, haversine_distance_km
+from ..geospatial.spatial import (
+    create_hazard_circle_polygon,
+    create_tsunami_inundation_polygon,
+    haversine_distance_km
+)
 from ..disasters import create_disaster_model
 from ..cascading.failure_engine import CascadingFailureEngine
 from ..evacuation.engine import EvacuationEngine
@@ -166,11 +170,19 @@ class SimulationInstance:
         }
         
         # 4. Generate Hazard Polygon
-        hazard_polygon = create_hazard_circle_polygon(
-            self.origin_lng,
-            self.origin_lat,
-            hazard_radius_km
-        )
+        if self.disaster == "tsunami":
+            progress = getattr(self.hazard_model, "calculate_surge_progress", lambda s: 1.0)(self.elapsed_seconds)
+            hazard_polygon = create_tsunami_inundation_polygon(
+                self.origin_lng,
+                self.origin_lat,
+                progress=progress
+            )
+        else:
+            hazard_polygon = create_hazard_circle_polygon(
+                self.origin_lng,
+                self.origin_lat,
+                hazard_radius_km
+            )
         
         # 5. AI Synthesis
         ai_briefing = AIService._generate_rule_based_synthesis(

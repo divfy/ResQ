@@ -21,25 +21,63 @@ class TsunamiDisaster(BaseDisaster):
         return round(1 + (nh*.45 + nd*.35 + nv*.20)*4, 2)
 
     def calculate_hazard_radius_km(self, elapsed_seconds: int) -> float:
-        # Travel time is represented explicitly; before arrival there is no inundation.
         inundation = self.properties["inundationDist"]
         t = max(0.0, elapsed_seconds)
-        if t < 30: return 0.0
-        if t < 180: return round(.2 + inundation*((t-30)/150.0), 2)
-        if t < 600: return round(inundation + .2, 2)
-        return round((inundation + .2) * max(.4, 1 - (t-600)/2400.0), 2)
+        if t < 15: return 0.0
+        if t < 120: return round(0.5 + inundation * ((t - 15) / 105.0), 2)
+        if t < 600: return round(inundation + 0.5, 2)
+        return round((inundation + 0.5) * max(0.4, 1.0 - (t - 600) / 2400.0), 2)
+
+    def calculate_surge_progress(self, elapsed_seconds: int) -> float:
+        """
+        Calculates oceanic surge front progression from offshore (progress ~ 0.20)
+        inland to the user's pinpoint (progress = 1.0 reached at ~60s).
+        """
+        t = max(0.0, elapsed_seconds)
+        if t < 60:
+            return round(0.20 + (t / 60.0) * 0.80, 3)
+        if t < 400:
+            return 1.0
+        return round(max(0.35, 1.0 - (t - 400) / 1200.0), 3)
 
     def evaluate_point_impact(self, lat, lng, origin_lat, origin_lng, elapsed_seconds) -> Dict[str, Any]:
-        reach = self.calculate_hazard_radius_km(elapsed_seconds)
-        dist = haversine_distance_km(lat, lng, origin_lat, origin_lng)
-        if reach <= 0 or dist > reach:
+        """
+        Directional oceanic tsunami inundation model for Chennai:
+        Surge originates offshore in the Bay of Bengal (east / right) and flows
+        westward across the coastline toward the user-selected pinpoint.
+        """
+        lat_span = 0.115
+        lat_diff = abs(lat - origin_lat)
+        if lat_diff > lat_span:
             return {"in_hazard_zone": False, "intensity": 0.0, "surge_height": 0.0, "blocked": False, "damage_state": "NONE"}
-        proximity = self._clamp(1 - dist/max(.2, reach))
-        local_height = self.properties["waveHeight"] * proximity
-        blocked = local_height > .8
-        if local_height > 5: state = "DESTROYED"
+
+        progress = self.calculate_surge_progress(elapsed_seconds)
+        ocean_lng = max(80.42, origin_lng + 0.16)
+
+        # Calculate where the surge front has reached at this latitude
+        y = (lat - origin_lat) / lat_span
+        inland_factor = max(0.12, (1.0 - 0.38 * (y ** 2)))
+        front_lng = ocean_lng - (ocean_lng - origin_lng) * progress * inland_factor
+
+        # If point is further west than the wave front has reached, it is not inundated yet
+        if lng < front_lng:
+            return {"in_hazard_zone": False, "intensity": 0.0, "surge_height": 0.0, "blocked": False, "damage_state": "NONE"}
+
+        # Point is submerged under the advancing ocean surge
+        depth_ratio = min(1.0, max(0.15, (lng - front_lng) / max(0.01, ocean_lng - origin_lng) + 0.35))
+        local_height = round(self.properties["waveHeight"] * depth_ratio, 2)
+        blocked = local_height > 0.8
+
+        if local_height > 5.0: state = "DESTROYED"
         elif local_height > 2.5: state = "SEVERE"
-        elif local_height > 1: state = "MODERATE"
-        elif local_height > .4: state = "MINOR"
+        elif local_height > 1.0: state = "MODERATE"
+        elif local_height > 0.4: state = "MINOR"
         else: state = "EXPOSED"
-        return {"in_hazard_zone": True, "intensity": round(proximity,3), "surge_height": round(local_height,2), "blocked": blocked, "damage_state": state}
+
+        return {
+            "in_hazard_zone": True,
+            "intensity": round(depth_ratio, 3),
+            "surge_height": local_height,
+            "blocked": blocked,
+            "damage_state": state
+        }
