@@ -14,31 +14,8 @@ def get_city_map_data(city_id: str):
     infra = OSMLoader.get_city_infrastructure(city_id)
     center = [infra.get("longitude", 80.27), infra.get("latitude", 13.08)]
     
-    # 1. 3D Buildings GeoJSON
+    # 1. 3D Buildings GeoJSON (disabled to remove synthetic greyish black boxes)
     building_features = []
-    for b in infra.get("buildings", []):
-        size = 0.0006
-        lng, lat = b["lng"], b["lat"]
-        building_features.append({
-            "type": "Feature",
-            "properties": {
-                "id": b["id"],
-                "name": b["name"],
-                "height": b["height"],
-                "min_height": 0,
-                "use": b.get("use", "general")
-            },
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": [[
-                    [lng - size, lat - size],
-                    [lng + size, lat - size],
-                    [lng + size, lat + size],
-                    [lng - size, lat + size],
-                    [lng - size, lat - size],
-                ]]
-            }
-        })
 
     # 2. Roads GeoJSON
     road_features = []

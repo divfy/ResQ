@@ -235,30 +235,10 @@
     }
 
     /* ------------------------------------------------------------
-       3D BUILDING LAYER EXTRUSIONS
+       3D BUILDING LAYER EXTRUSIONS (DISABLED PER USER REQUEST)
     ------------------------------------------------------------ */
     function setup3DBuildingLayer(buildingsGeoJSON) {
-        if (!map) return;
-
-        if (buildingsGeoJSON && !map.getSource("3d-buildings-source")) {
-            map.addSource("3d-buildings-source", {
-                type: "geojson",
-                data: buildingsGeoJSON
-            });
-
-            map.addLayer({
-                id: "3d-buildings",
-                source: "3d-buildings-source",
-                type: "fill-extrusion",
-                minzoom: 11,
-                paint: {
-                    "fill-extrusion-color": isLightMode() ? "#b8c2c8" : "#1e293b",
-                    "fill-extrusion-height": ["get", "height"],
-                    "fill-extrusion-base": ["get", "min_height"],
-                    "fill-extrusion-opacity": 0.85
-                }
-            });
-        }
+        // Disabled: removes artificial greyish black boxes from the map
     }
 
     /* ------------------------------------------------------------
@@ -282,16 +262,19 @@
                     id: "osm-roads-base",
                     source: "osm-roads-source",
                     type: "line",
+                    layout: {
+                        "line-join": "round",
+                        "line-cap": "round"
+                    },
                     paint: {
                         "line-color": isLightMode() ? "#94a3b8" : "#334155",
-                        "line-width": 2,
-                        "line-opacity": 0.5
+                        "line-width": 2.5,
+                        "line-opacity": 0.6
                     }
                 });
             }
 
-            // 2. Setup 3D Buildings from OSM
-            setup3DBuildingLayer(cityData.buildings);
+            // 2. 3D Buildings from OSM disabled to remove greyish black boxes
 
             // 3. Spawn POI markers for Hospitals, Shelters, and Power Grid
             spawnInfrastructurePOIMarkers(cityData.pois.features);
@@ -396,9 +379,13 @@
                 id: "blocked-roads-line",
                 source: "blocked-roads-source",
                 type: "line",
+                layout: {
+                    "line-join": "round",
+                    "line-cap": "round"
+                },
                 paint: {
                     "line-color": "#ef4444",
-                    "line-width": 4.5,
+                    "line-width": 5.0,
                     "line-opacity": 0.95
                 }
             });
@@ -415,9 +402,13 @@
                 id: "evac-routes-line",
                 source: "evac-routes-source",
                 type: "line",
+                layout: {
+                    "line-join": "round",
+                    "line-cap": "round"
+                },
                 paint: {
                     "line-color": "#10b981",
-                    "line-width": 4.5,
+                    "line-width": 5.0,
                     "line-opacity": 0.95
                 }
             });
