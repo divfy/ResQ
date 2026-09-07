@@ -1,294 +1,228 @@
-"""Generic Cascading Failure and Infrastructure Dependency Engine."""
+"""Cascading failure and infrastructure dependency engine.
 
-from typing import Dict, List, Any, Tuple
+The engine deliberately keeps the dependency chain deterministic:
+hazard -> physical asset exposure -> asset state -> dependent network state.
+It does not invent a route or silently restore a failed asset.
+"""
+
+from typing import Dict, List, Any
 from ..core.logging import logger
+from ..geospatial.spatial import haversine_distance_km
+
 
 class CascadingFailureEngine:
     def __init__(self, infrastructure: Dict[str, Any]):
         self.infrastructure = infrastructure
         self.events: List[Dict[str, Any]] = []
+        self._previous_states: Dict[str, str] = {}
 
-    def evaluate_cascading_effects(
-        self,
-        elapsed_seconds: int,
-        hazard_model,
-        origin_lat: float,
-        origin_lng: float
-    ) -> Dict[str, Any]:
-        """
-        Evaluate full cascade chain across power, hospitals, roads, bridges, and shelters.
-        """
+    def _event_on_transition(self, key: str, new_state: str, event: Dict[str, Any]):
+        old_state = self._previous_states.get(key)
+        self._previous_states[key] = new_state
+        if old_state is not None and old_state == new_state:
+            return
+        if old_state is not None and old_state != new_state:
+            self.events.append(event)
+
+    def evaluate_cascading_effects(self, elapsed_seconds, hazard_model, origin_lat, origin_lng):
         self.events = []
-        
-        # 1. Evaluate Power Stations
-        power_statuses = self._evaluate_power_grid(hazard_model, origin_lat, origin_lng, elapsed_seconds)
-        
-        # 2. Evaluate Bridges & Road Intersections
-        bridge_statuses = self._evaluate_bridges(hazard_model, origin_lat, origin_lng, elapsed_seconds)
-        road_statuses = self._evaluate_roads(hazard_model, origin_lat, origin_lng, elapsed_seconds, bridge_statuses)
-        
-        # 3. Evaluate Hospitals with Power Dependency & Casualties Influx
-        hospital_statuses = self._evaluate_hospitals(hazard_model, origin_lat, origin_lng, elapsed_seconds, power_statuses)
-        
-        # 4. Evaluate Shelters & Evacuee Demand
-        shelter_statuses = self._evaluate_shelters(hazard_model, origin_lat, origin_lng, elapsed_seconds)
-        
-        return {
-            "power": power_statuses,
-            "bridges": bridge_statuses,
-            "roads": road_statuses,
-            "hospitals": hospital_statuses,
-            "shelters": shelter_statuses,
-            "events": self.events
-        }
+        power = self._evaluate_power_grid(hazard_model, origin_lat, origin_lng, elapsed_seconds)
+        bridges = self._evaluate_bridges(hazard_model, origin_lat, origin_lng, elapsed_seconds)
+        roads = self._evaluate_roads(hazard_model, origin_lat, origin_lng, elapsed_seconds, bridges)
+        hospitals = self._evaluate_hospitals(hazard_model, origin_lat, origin_lng, elapsed_seconds, power)
+        shelters = self._evaluate_shelters(hazard_model, origin_lat, origin_lng, elapsed_seconds, roads)
+        return {"power": power, "bridges": bridges, "roads": roads, "hospitals": hospitals, "shelters": shelters, "events": self.events}
 
     def _evaluate_power_grid(self, hazard, origin_lat, origin_lng, elapsed):
         results = []
         for station in self.infrastructure.get("powerStations", []):
-            impact = hazard.evaluate_point_impact(
-                station["latitude"],
-                station["longitude"],
-                origin_lat,
-                origin_lng,
-                elapsed
-            )
-            
-            is_offline = False
+            impact = hazard.evaluate_point_impact(station["latitude"], station["longitude"], origin_lat, origin_lng, elapsed)
             status = "OPERATIONAL"
-            
             if impact["in_hazard_zone"]:
-                if station.get("floodProne", False) and hazard.name in ("flood", "tsunami", "cyclone"):
+                if hazard.name in ("flood", "tsunami", "cyclone") and station.get("floodProne", False):
                     status = "FLOODED_OUTAGE"
-                    is_offline = True
-                elif hazard.name == "earthquake" and impact.get("local_pga", 0) > 0.25:
+                elif hazard.name == "earthquake" and impact.get("local_pga", 0) > .25:
                     status = "SEISMIC_TRIP"
-                    is_offline = True
                 elif hazard.name == "cyclone" and impact.get("wind_speed", 0) > 135:
                     status = "GRID_COLLAPSE"
-                    is_offline = True
-            
-            if is_offline and elapsed > 30:
-                self.events.append({
-                    "type": "POWER_OUTAGE",
-                    "assetId": station["id"],
-                    "name": station["name"],
-                    "message": f"Power substation {station['name']} tripped offline due to {status.lower()}."
-                })
-            
+            offline = status != "OPERATIONAL"
+            key = f"power:{station['id']}"
+            self._event_on_transition(key, "OFFLINE" if offline else "OPERATIONAL", {
+                "type": "POWER_OUTAGE", "assetId": station["id"], "name": station["name"],
+                "message": f"Power substation {station['name']} transitioned to {status}."
+            }) if elapsed > 0 else self._previous_states.setdefault(key, "OFFLINE" if offline else "OPERATIONAL")
             results.append({
-                "id": station["id"],
-                "name": station["name"],
-                "latitude": station["latitude"],
-                "longitude": station["longitude"],
-                "status": "OFFLINE" if is_offline else "OPERATIONAL",
-                "failureMode": status,
-                "supplies": station.get("supplies", []),
-                "capacityMW": station.get("capacityMW", 100)
+                "id": station["id"], "name": station["name"], "latitude": station["latitude"], "longitude": station["longitude"],
+                "status": "OFFLINE" if offline else "OPERATIONAL", "failureMode": status,
+                "supplies": station.get("supplies", []), "capacityMW": station.get("capacityMW", 100),
             })
         return results
 
     def _evaluate_bridges(self, hazard, origin_lat, origin_lng, elapsed):
         results = []
         for bridge in self.infrastructure.get("bridges", []):
-            impact = hazard.evaluate_point_impact(
-                bridge["latitude"],
-                bridge["longitude"],
-                origin_lat,
-                origin_lng,
-                elapsed
-            )
-            is_damaged = False
+            impact = hazard.evaluate_point_impact(bridge["latitude"], bridge["longitude"], origin_lat, origin_lng, elapsed)
             status = "OPEN"
-            
             if impact["in_hazard_zone"]:
-                if hazard.name == "earthquake" and impact.get("local_pga", 0) > 0.35:
+                if hazard.name == "earthquake" and impact.get("local_pga", 0) > .35:
                     status = "COLLAPSED"
-                    is_damaged = True
-                elif hazard.name in ("flood", "tsunami") and impact["intensity"] > 0.6:
+                elif hazard.name in ("flood", "tsunami") and impact["intensity"] > .6:
                     status = "SUBMERGED_CLOSED"
-                    is_damaged = True
-                elif hazard.name == "cyclone" and impact["intensity"] > 0.8:
+                elif hazard.name == "cyclone" and impact["intensity"] > .8:
                     status = "STRUCTURAL_RISK"
-                    is_damaged = True
-
-            if is_damaged:
-                self.events.append({
-                    "type": "BRIDGE_DAMAGED",
-                    "bridgeId": bridge["id"],
-                    "name": bridge["name"],
-                    "status": status,
-                    "message": f"Bridge {bridge['name']} closed: {status}."
+            closed = status != "OPEN"
+            key = f"bridge:{bridge['id']}"
+            if elapsed > 0:
+                self._event_on_transition(key, status, {
+                    "type": "BRIDGE_DAMAGED", "bridgeId": bridge["id"], "name": bridge["name"], "status": status,
+                    "message": f"Bridge {bridge['name']} transitioned to {status}."
                 })
-            
-            results.append({
-                "id": bridge["id"],
-                "name": bridge["name"],
-                "status": status,
-                "is_closed": is_damaged
-            })
+            else:
+                self._previous_states.setdefault(key, status)
+            results.append({"id": bridge["id"], "name": bridge["name"], "status": status, "is_closed": closed})
         return results
+
+    @staticmethod
+    def _densify(coords, spacing_m=50.0):
+        """Add points along road segments so hazard crossing between OSM vertices is detected."""
+        if len(coords) < 2:
+            return coords
+        out = [coords[0]]
+        for a, b in zip(coords, coords[1:]):
+            d_m = haversine_distance_km(a[1], a[0], b[1], b[0]) * 1000
+            steps = max(1, int(d_m / spacing_m))
+            for i in range(1, steps + 1):
+                f = i / steps
+                out.append([a[0] + (b[0]-a[0])*f, a[1] + (b[1]-a[1])*f])
+        return out
 
     def _evaluate_roads(self, hazard, origin_lat, origin_lng, elapsed, bridge_statuses):
         results = []
-        damaged_bridge_names = {b["name"].lower() for b in bridge_statuses if b["is_closed"]}
+        closed_bridge_ids = {b["id"] for b in bridge_statuses if b["is_closed"]}
+        closed_bridge_names = {b["name"].lower() for b in self.infrastructure.get("bridges", []) if b["id"] in closed_bridge_ids}
 
         for road in self.infrastructure.get("roads", []):
-            is_blocked = False
-            damage_state = "NONE"
+            blocked = False
+            state = "NONE"
             max_intensity = 0.0
+            # Explicit bridge IDs are preferred; legacy name matching remains as a compatibility fallback.
+            linked_bridges = set(road.get("bridgeIds", []))
+            road_name = road.get("name", "").lower()
+            bridge_dependency = bool(linked_bridges & closed_bridge_ids) or any(n and n in road_name for n in closed_bridge_names)
+            if bridge_dependency:
+                blocked, state = True, "SEVERE"
 
-            # Check if road passes over a damaged bridge
-            road_name_lower = road["name"].lower()
-            if any(bn in road_name_lower for bn in damaged_bridge_names):
-                is_blocked = True
-                damage_state = "SEVERE"
-
-            # Check road coordinates against hazard impact
-            for pt in road["coordinates"]:
+            for pt in self._densify(road.get("coordinates", [])):
                 impact = hazard.evaluate_point_impact(pt[1], pt[0], origin_lat, origin_lng, elapsed)
                 if impact["in_hazard_zone"]:
                     max_intensity = max(max_intensity, impact["intensity"])
                     if impact["blocked"]:
-                        is_blocked = True
-                        damage_state = impact["damage_state"]
+                        blocked = True
+                        if impact["damage_state"] != "NONE":
+                            state = impact["damage_state"]
 
-            if is_blocked and elapsed > 20:
-                self.events.append({
-                    "type": "ROAD_BLOCKED",
-                    "roadId": road["id"],
-                    "name": road["name"],
-                    "damageState": damage_state,
-                    "message": f"Arterial corridor {road['name']} impassable: {damage_state}."
+            key = f"road:{road['id']}"
+            new_state = "BLOCKED" if blocked else "OPEN"
+            if elapsed > 0:
+                self._event_on_transition(key, new_state, {
+                    "type": "ROAD_BLOCKED", "roadId": road["id"], "name": road["name"], "damageState": state,
+                    "message": f"Road {road['name']} transitioned to {state if blocked else 'OPEN'}."
                 })
-
-            results.append({
-                "id": road["id"],
-                "name": road["name"],
-                "blocked": is_blocked,
-                "damageState": damage_state,
-                "hazardExposure": round(max_intensity, 2),
-                "coordinates": road["coordinates"]
-            })
+            else:
+                self._previous_states.setdefault(key, new_state)
+            results.append({"id": road["id"], "name": road["name"], "blocked": blocked, "damageState": state,
+                            "hazardExposure": round(max_intensity, 2), "coordinates": road["coordinates"]})
         return results
 
     def _evaluate_hospitals(self, hazard, origin_lat, origin_lng, elapsed, power_statuses):
         results = []
-        # Find which power stations are offline
-        offline_station_ids = {p["id"] for p in power_statuses if p["status"] == "OFFLINE"}
-
-        # Total patient surge grows with time and hazard severity
+        offline_ids = {p["id"] for p in power_statuses if p["status"] == "OFFLINE"}
         severity = hazard.calculate_severity()
-        time_growth = 1.0 + (elapsed / 120.0)
+        time_growth = 1.0 + max(0, elapsed) / 120.0
 
         for hosp in self.infrastructure.get("hospitals", []):
-            impact = hazard.evaluate_point_impact(
-                hosp["latitude"],
-                hosp["longitude"],
-                origin_lat,
-                origin_lng,
-                elapsed
-            )
+            impact = hazard.evaluate_point_impact(hosp["latitude"], hosp["longitude"], origin_lat, origin_lng, elapsed)
+            supplied_offline = any(p["id"] in offline_ids and hosp["id"] in p.get("supplies", []) for p in self.infrastructure.get("powerStations", []))
+            backup_exhausted = supplied_offline and elapsed > 60
 
-            # Check if upstream power supplier is offline
-            is_power_depleted = False
-            for station in self.infrastructure.get("powerStations", []):
-                if station["id"] in offline_station_ids and hosp["id"] in station.get("supplies", []):
-                    # Battery backup holds for 60 seconds before power failure degradation
-                    if elapsed > 60:
-                        is_power_depleted = True
+            total_beds = int(hosp["beds"])
+            base_avail = int(hosp["availableBeds"])
+            total_icu = int(hosp["icuBeds"])
+            base_icu = int(hosp["availableIcu"])
 
-            total_beds = hosp["beds"]
-            base_avail = hosp["availableBeds"]
-            total_icu = hosp["icuBeds"]
-            base_icu = hosp["availableIcu"]
+            # Physical hazard exposure reduces usable capacity before demand is applied.
+            exposure = impact["intensity"] if impact["in_hazard_zone"] else 0.0
+            physical_factor = 1.0
+            if impact["in_hazard_zone"]:
+                if impact.get("damage_state") in ("DESTROYED", "SEVERE"):
+                    physical_factor = .20
+                elif impact.get("damage_state") == "MODERATE":
+                    physical_factor = .55
+                else:
+                    physical_factor = max(.70, 1.0 - .25 * exposure)
+            power_factor = .50 if backup_exhausted else 1.0
+            effective_factor = min(physical_factor, power_factor)
 
-            # Cascade: power outage cuts functional ICU and creates trauma bottleneck
-            effective_capacity_factor = 0.50 if is_power_depleted else 1.0
+            dist_km = haversine_distance_km(hosp["latitude"], hosp["longitude"], origin_lat, origin_lng)
+            proximity = max(.0, 1.0 - dist_km / 12.0)
+            influx = int(base_avail * .45 * (severity / 3.0) * max(.2, proximity) * min(3.0, time_growth))
+            avail_beds = max(0, int(base_avail * effective_factor) - influx)
+            avail_icu = max(0, int(base_icu * effective_factor) - int(influx * .30))
+            occupancy = min(1.0, 1.0 - avail_beds / max(1, total_beds))
 
-            # Patient influx based on proximity to disaster origin
-            dist_km = ((hosp["latitude"] - origin_lat)**2 + (hosp["longitude"] - origin_lng)**2)**0.5 * 111.0
-            proximity_factor = max(0.2, 1.0 - (dist_km / 12.0))
-            patient_influx = int(base_avail * 0.45 * (severity / 3.0) * proximity_factor * min(3.0, time_growth))
-
-            cur_avail_beds = max(0, int(base_avail * effective_capacity_factor) - patient_influx)
-            cur_avail_icu = max(0, int(base_icu * effective_capacity_factor) - int(patient_influx * 0.3))
-
-            occupancy_pct = min(1.0, 1.0 - (cur_avail_beds / max(1, total_beds)))
-
-            # Determine triage status
-            if cur_avail_beds == 0 or occupancy_pct >= 0.96:
+            if physical_factor <= .20:
+                status = "DAMAGED"
+            elif avail_beds == 0 or occupancy >= .96:
                 status = "FULL"
-            elif is_power_depleted:
+            elif backup_exhausted or physical_factor < 1.0:
                 status = "COMPROMISED"
-            elif occupancy_pct > 0.82:
+            elif occupancy > .82:
                 status = "STRESSED"
-            elif occupancy_pct > 0.65:
+            elif occupancy > .65:
                 status = "NEAR_CAPACITY"
             else:
                 status = "OPERATIONAL"
 
-            if status in ("FULL", "COMPROMISED") and elapsed > 45:
-                self.events.append({
-                    "type": "HOSPITAL_STRESSED",
-                    "hospitalId": hosp["id"],
-                    "name": hosp["name"],
-                    "status": status,
-                    "message": f"Trauma facility {hosp['name']} reached capacity [{status}] - diverting emergency admissions."
+            key = f"hospital:{hosp['id']}"
+            if elapsed > 0:
+                self._event_on_transition(key, status, {
+                    "type": "HOSPITAL_STATUS_CHANGED", "hospitalId": hosp["id"], "name": hosp["name"], "status": status,
+                    "message": f"Hospital {hosp['name']} transitioned to {status}."
                 })
+            else:
+                self._previous_states.setdefault(key, status)
 
-            results.append({
-                "id": hosp["id"],
-                "name": hosp["name"],
-                "latitude": hosp["latitude"],
-                "longitude": hosp["longitude"],
-                "beds": total_beds,
-                "availableBeds": cur_avail_beds,
-                "icuBeds": total_icu,
-                "availableIcu": cur_avail_icu,
-                "powerStatus": "BACKUP_GENERATOR" if is_power_depleted else "GRID",
-                "operationalStatus": status,
-                "occupancyPct": round(occupancy_pct * 100, 1),
-                "address": hosp.get("address", "")
-            })
+            results.append({"id": hosp["id"], "name": hosp["name"], "latitude": hosp["latitude"], "longitude": hosp["longitude"],
+                            "beds": total_beds, "availableBeds": avail_beds, "icuBeds": total_icu, "availableIcu": avail_icu,
+                            "powerStatus": "BACKUP_GENERATOR" if supplied_offline else "GRID",
+                            "operationalStatus": status, "occupancyPct": round(occupancy * 100, 1), "address": hosp.get("address", "")})
         return results
 
-    def _evaluate_shelters(self, hazard, origin_lat, origin_lng, elapsed):
+    def _evaluate_shelters(self, hazard, origin_lat, origin_lng, elapsed, roads):
         results = []
         severity = hazard.calculate_severity()
-        time_growth = min(2.5, 1.0 + (elapsed / 150.0))
+        time_growth = min(2.5, 1.0 + max(0, elapsed) / 150.0)
+        blocked_roads = [r for r in roads if r["blocked"]]
 
         for shelter in self.infrastructure.get("shelters", []):
-            impact = hazard.evaluate_point_impact(
-                shelter["latitude"],
-                shelter["longitude"],
-                origin_lat,
-                origin_lng,
-                elapsed
-            )
+            impact = hazard.evaluate_point_impact(shelter["latitude"], shelter["longitude"], origin_lat, origin_lng, elapsed)
+            capacity, base_occ = int(shelter["capacity"]), int(shelter["occupancy"])
+            influx = int(capacity * .15 * (severity / 2.5) * time_growth)
+            occupancy = min(capacity, base_occ + influx)
+            remaining = max(0, capacity - occupancy)
 
-            capacity = shelter["capacity"]
-            base_occ = shelter["occupancy"]
-
-            # Influx increases as civilians evacuate toward operational refuge
-            influx = int(capacity * 0.15 * (severity / 2.5) * time_growth)
-            current_occ = min(capacity, base_occ + influx)
-            rem_cap = max(0, capacity - current_occ)
-            pct = current_occ / max(1, capacity)
-
-            status = "FULL" if rem_cap == 0 else "OPERATIONAL"
-            if impact["in_hazard_zone"] and impact["blocked"]:
-                status = "INACCESSIBLE"
-
-            results.append({
-                "id": shelter["id"],
-                "name": shelter["name"],
-                "latitude": shelter["latitude"],
-                "longitude": shelter["longitude"],
-                "capacity": capacity,
-                "occupancy": current_occ,
-                "remainingCapacity": rem_cap,
-                "status": status,
-                "occupancyPct": round(pct * 100, 1),
-                "address": shelter.get("address", "")
-            })
+            physically_unsafe = impact["in_hazard_zone"] and impact.get("damage_state") in ("SEVERE", "DESTROYED")
+            inaccessible = physically_unsafe or (impact["in_hazard_zone"] and impact["blocked"])
+            status = "INACCESSIBLE" if inaccessible else ("FULL" if remaining == 0 else "OPERATIONAL")
+            key = f"shelter:{shelter['id']}"
+            if elapsed > 0:
+                self._event_on_transition(key, status, {
+                    "type": "SHELTER_STATUS_CHANGED", "shelterId": shelter["id"], "name": shelter["name"], "status": status,
+                    "message": f"Shelter {shelter['name']} transitioned to {status}."
+                })
+            else:
+                self._previous_states.setdefault(key, status)
+            results.append({"id": shelter["id"], "name": shelter["name"], "latitude": shelter["latitude"], "longitude": shelter["longitude"],
+                            "capacity": capacity, "occupancy": occupancy, "remainingCapacity": remaining, "status": status,
+                            "occupancyPct": round(occupancy / max(1, capacity) * 100, 1), "address": shelter.get("address", "")})
         return results
