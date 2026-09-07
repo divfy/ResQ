@@ -43,6 +43,7 @@
     let wsConnection = null;
     let isSelectingOrigin = false;
     let originMarker = null;
+    let cycloneSwirlMarker = null;
     let currentOrigin = {
         latitude: Number(simulationConfig.latitude) || 13.0827,
         longitude: Number(simulationConfig.longitude) || 80.2707
@@ -366,31 +367,42 @@
         if (!map) return;
         const light = isLightMode();
         const isTsunami = (simulationConfig.disaster || "").toLowerCase() === "tsunami";
+        const isCyclone = (simulationConfig.disaster || "").toLowerCase() === "cyclone";
 
-        // Tsunami: ocean surge translucent water blue with vivid cyan/white wavecrest border
-        // Other disasters (flood, cyclone, earthquake): tactical amber
+        // Disaster-specific color palettes:
+        // - Tsunami: ocean surge translucent water blue with vivid cyan/white wavecrest border
+        // - Cyclone: atmospheric vortex translucent violet/purple with neon purple boundary
+        // - Flood & Earthquake: tactical high-contrast amber
         const hazardFillColor = isTsunami
             ? (light ? "#0284c7" : "#0369a1")
+            : isCyclone
+            ? (light ? "#8b5cf6" : "#7c3aed")
             : (light ? "#d97706" : "#f59e0b");
         const hazardFillOpacity = isTsunami
             ? (light ? 0.45 : 0.38)
+            : isCyclone
+            ? (light ? 0.35 : 0.28)
             : (light ? 0.35 : 0.22);
         const hazardLineColor = isTsunami
             ? (light ? "#0284c7" : "#38bdf8")
+            : isCyclone
+            ? (light ? "#7c3aed" : "#c084fc")
             : (light ? "#b45309" : "#f59e0b");
-        const hazardLineWidth = isTsunami ? (light ? 3.5 : 2.8) : (light ? 3.0 : 2.0);
-        const hazardDashArray = isTsunami ? [4, 1] : [3, 2];
+        const hazardLineWidth = isTsunami ? (light ? 3.5 : 2.8) : isCyclone ? (light ? 3.2 : 2.8) : (light ? 3.0 : 2.0);
+        const hazardDashArray = isTsunami ? [4, 1] : isCyclone ? [2, 2] : [3, 2];
 
         // Update Legend Pill Indicator
         const legendHazardInd = document.getElementById("legendHazardIndicator");
         const legendHazardTxt = document.getElementById("legendHazardText");
         if (legendHazardInd) {
+            legendHazardInd.classList.remove("yellow-box", "blue-box", "purple-box");
             if (isTsunami) {
-                legendHazardInd.classList.remove("yellow-box");
                 legendHazardInd.classList.add("blue-box");
                 if (legendHazardTxt) legendHazardTxt.textContent = "TSUNAMI SURGE";
+            } else if (isCyclone) {
+                legendHazardInd.classList.add("purple-box");
+                if (legendHazardTxt) legendHazardTxt.textContent = "CYCLONE SWATH";
             } else {
-                legendHazardInd.classList.remove("blue-box");
                 legendHazardInd.classList.add("yellow-box");
                 if (legendHazardTxt) legendHazardTxt.textContent = "HAZARD ZONE";
             }
@@ -575,12 +587,107 @@
         return coords;
     }
 
+    function calculateCycloneTrack(originLat, originLng, progress = 1.0, totalSteps = 32) {
+        const prog = Math.max(0.0, Math.min(1.0, progress));
+        const steps = Math.max(1, Math.round(totalSteps * prog));
+        const track = [];
+        const A = 0.10; // Westward inland penetration (~11 km)
+        const L = 0.13; // Northward track progression (~14.5 km)
+
+        for (let i = 0; i <= steps; i++) {
+            const u = (totalSteps > 0) ? (i / totalSteps) * prog : 0.0;
+            const ptLng = originLng - A * Math.sin(Math.PI * u);
+            const ptLat = originLat + L * (1.15 * u - 0.15 * (u * u));
+            track.push([Number(ptLng.toFixed(6)), Number(ptLat.toFixed(6))]);
+        }
+        if (track.length === 0) {
+            track.push([Number(originLng.toFixed(6)), Number(originLat.toFixed(6))]);
+        }
+        return track;
+    }
+
+    function createSweptSwathPolygon(trackPoints, radiusKm = 5.0, numCapPts = 8) {
+        if (!trackPoints || trackPoints.length === 0) return [];
+        if (trackPoints.length === 1) {
+            return createHazardCirclePolygon(trackPoints[0][0], trackPoints[0][1], radiusKm, 24);
+        }
+
+        const leftPts = [];
+        const rightPts = [];
+
+        for (let i = 0; i < trackPoints.length; i++) {
+            const [cLng, cLat] = trackPoints[i];
+            const latDeg = radiusKm / 110.574;
+            const lonDeg = radiusKm / (111.320 * Math.cos(cLat * Math.PI / 180.0));
+
+            let dx, dy;
+            if (i === 0) {
+                dx = (trackPoints[1][0] - cLng) / lonDeg;
+                dy = (trackPoints[1][1] - cLat) / latDeg;
+            } else if (i === trackPoints.length - 1) {
+                dx = (cLng - trackPoints[i - 1][0]) / lonDeg;
+                dy = (cLat - trackPoints[i - 1][1]) / latDeg;
+            } else {
+                dx = (trackPoints[i + 1][0] - trackPoints[i - 1][0]) / lonDeg;
+                dy = (trackPoints[i + 1][1] - trackPoints[i - 1][1]) / latDeg;
+            }
+
+            const length = Math.hypot(dx, dy) || 1.0;
+            const nx = -dy / length;
+            const ny = dx / length;
+
+            leftPts.push([Number((cLng + nx * lonDeg).toFixed(6)), Number((cLat + ny * latDeg).toFixed(6))]);
+            rightPts.push([Number((cLng - nx * lonDeg).toFixed(6)), Number((cLat - ny * latDeg).toFixed(6))]);
+        }
+
+        const coords = [...leftPts];
+
+        // Semicircular cap at active eye (end)
+        const [endLng, endLat] = trackPoints[trackPoints.length - 1];
+        const endLatDeg = radiusKm / 110.574;
+        const endLonDeg = radiusKm / (111.320 * Math.cos(endLat * Math.PI / 180.0));
+        let startAng = Math.atan2((leftPts[leftPts.length - 1][1] - endLat) / endLatDeg, (leftPts[leftPts.length - 1][0] - endLng) / endLonDeg);
+        let endAng = Math.atan2((rightPts[rightPts.length - 1][1] - endLat) / endLatDeg, (rightPts[rightPts.length - 1][0] - endLng) / endLonDeg);
+        if (endAng > startAng) {
+            endAng -= 2.0 * Math.PI;
+        }
+        for (let j = 1; j < numCapPts; j++) {
+            const a = startAng + (endAng - startAng) * (j / numCapPts);
+            coords.push([Number((endLng + Math.cos(a) * endLonDeg).toFixed(6)), Number((endLat + Math.sin(a) * endLatDeg).toFixed(6))]);
+        }
+
+        coords.push(...[...rightPts].reverse());
+
+        // Semicircular cap at track start
+        const [sLng, sLat] = trackPoints[0];
+        const sLatDeg = radiusKm / 110.574;
+        const sLonDeg = radiusKm / (111.320 * Math.cos(sLat * Math.PI / 180.0));
+        let startAngS = Math.atan2((rightPts[0][1] - sLat) / sLatDeg, (rightPts[0][0] - sLng) / sLonDeg);
+        let endAngS = Math.atan2((leftPts[0][1] - sLat) / sLatDeg, (leftPts[0][0] - sLng) / sLonDeg);
+        if (endAngS > startAngS) {
+            endAngS -= 2.0 * Math.PI;
+        }
+        for (let j = 1; j < numCapPts; j++) {
+            const a = startAngS + (endAngS - startAngS) * (j / numCapPts);
+            coords.push([Number((sLng + Math.cos(a) * sLonDeg).toFixed(6)), Number((sLat + Math.sin(a) * sLatDeg).toFixed(6))]);
+        }
+
+        coords.push(coords[0]);
+        return coords;
+    }
+
     function updatePreviewHazardPolygon() {
         if (!map || !map.getSource("hazard-source")) return;
         const isTsunami = (simulationConfig.disaster || "").toLowerCase() === "tsunami";
+        const isCyclone = (simulationConfig.disaster || "").toLowerCase() === "cyclone";
         let polyCoords;
         if (isTsunami) {
             polyCoords = createTsunamiOceanicPolygon(currentOrigin.longitude, currentOrigin.latitude, 1.0);
+        } else if (isCyclone) {
+            const previewTrack = calculateCycloneTrack(currentOrigin.latitude, currentOrigin.longitude, 1.0);
+            const radius = Number(simulationConfig.hazardRadius) || 5.0;
+            polyCoords = createSweptSwathPolygon(previewTrack, radius);
+            setupCycloneSwirlMarker(currentOrigin.longitude, currentOrigin.latitude);
         } else {
             const radius = Number(simulationConfig.hazardRadius) || 4.2;
             polyCoords = createHazardCirclePolygon(currentOrigin.longitude, currentOrigin.latitude, radius);
@@ -590,7 +697,7 @@
             type: "FeatureCollection",
             features: [{
                 type: "Feature",
-                properties: { name: isTsunami ? "Active Tsunami Inundation Surge" : "Active Impact Hazard Zone" },
+                properties: { name: isTsunami ? "Active Tsunami Inundation Surge" : isCyclone ? "Active Cyclone Swept Swath" : "Active Impact Hazard Zone" },
                 geometry: {
                     type: "Polygon",
                     coordinates: [polyCoords]
@@ -600,10 +707,49 @@
         if (mapRadiusReadout) {
             if (isTsunami) {
                 mapRadiusReadout.textContent = "Ocean Surge";
+            } else if (isCyclone) {
+                mapRadiusReadout.textContent = "C-Track Swath";
             } else {
                 const radius = Number(simulationConfig.hazardRadius) || 4.2;
                 mapRadiusReadout.textContent = `${radius.toFixed(1)} km`;
             }
+        }
+    }
+
+    function setupCycloneSwirlMarker(lng, lat) {
+        if (!map) return;
+        if (cycloneSwirlMarker) {
+            cycloneSwirlMarker.setLngLat([lng, lat]);
+            return;
+        }
+
+        const el = document.createElement("div");
+        el.className = "cyclone-swirl-container";
+        el.id = "cycloneSwirlMarker";
+        el.title = "Cyclone Vortex & Eye Wall";
+        el.innerHTML = `
+            <div class="cyclone-tag"><span>🌀</span> <span>CAT 3 · EYE</span></div>
+            <svg class="cyclone-vortex-mesh" viewBox="0 0 100 100" aria-hidden="true">
+                <path d="M 50 50 Q 70 30 88 50 Q 75 75 50 50" fill="rgba(192, 132, 252, 0.5)"/>
+                <path d="M 50 50 Q 30 70 50 88 Q 75 75 50 50" fill="rgba(139, 92, 246, 0.6)"/>
+                <path d="M 50 50 Q 30 30 12 50 Q 25 25 50 50" fill="rgba(192, 132, 252, 0.5)"/>
+                <path d="M 50 50 Q 70 30 50 12 Q 25 25 50 50" fill="rgba(139, 92, 246, 0.6)"/>
+            </svg>
+            <div class="cyclone-eye-core"></div>
+        `;
+
+        cycloneSwirlMarker = new maplibregl.Marker({
+            element: el,
+            anchor: "center"
+        })
+        .setLngLat([lng, lat])
+        .addTo(map);
+    }
+
+    function removeCycloneSwirlMarker() {
+        if (cycloneSwirlMarker) {
+            cycloneSwirlMarker.remove();
+            cycloneSwirlMarker = null;
         }
     }
 
@@ -983,6 +1129,8 @@
         if (mapRadiusReadout) {
             if ((simulationConfig.disaster || "").toLowerCase() === "tsunami") {
                 mapRadiusReadout.textContent = "Ocean Surge";
+            } else if ((simulationConfig.disaster || "").toLowerCase() === "cyclone") {
+                mapRadiusReadout.textContent = state.hazardRadiusKm ? `${state.hazardRadiusKm.toFixed(1)} km Swath` : "C-Track Swath";
             } else if (state.hazardRadiusKm) {
                 mapRadiusReadout.textContent = `${state.hazardRadiusKm.toFixed(1)} km`;
             }
@@ -1006,13 +1154,25 @@
     function updateMapboxLayers(state) {
         if (!map || !map.isStyleLoaded()) return;
 
+        // Cyclone Swirl & Eye Marker
+        const isCyclone = (simulationConfig.disaster || "").toLowerCase() === "cyclone";
+        if (isCyclone) {
+            if (state.cycloneEye && Array.isArray(state.cycloneEye) && state.cycloneEye.length === 2) {
+                setupCycloneSwirlMarker(state.cycloneEye[0], state.cycloneEye[1]);
+            } else if (currentOrigin) {
+                setupCycloneSwirlMarker(currentOrigin.longitude, currentOrigin.latitude);
+            }
+        } else {
+            removeCycloneSwirlMarker();
+        }
+
         // A. Hazard Polygon Envelope
         if (state.hazardPolygon && map.getSource("hazard-source")) {
             map.getSource("hazard-source").setData({
                 type: "FeatureCollection",
                 features: [{
                     type: "Feature",
-                    properties: { name: "Active Impact Hazard Zone" },
+                    properties: { name: isCyclone ? "Active Cyclone Swept Swath" : "Active Impact Hazard Zone" },
                     geometry: {
                         type: "Polygon",
                         coordinates: [state.hazardPolygon]

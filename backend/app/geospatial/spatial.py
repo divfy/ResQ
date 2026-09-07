@@ -74,3 +74,122 @@ def create_tsunami_inundation_polygon(
     # 4. Close the polygon back to the first point
     coords.append(coords[0])
     return coords
+
+
+def calculate_cyclone_track(origin_lat: float, origin_lng: float, progress: float = 1.0, total_steps: int = 32) -> List[List[float]]:
+    """
+    Generate parametric C-shaped cyclone trajectory starting at (origin_lng, origin_lat).
+    The cyclone moves westward across the city and recurves back toward the ocean / east.
+    """
+    progress = max(0.0, min(1.0, progress))
+    steps = max(1, int(total_steps * progress))
+    track = []
+    A = 0.10  # Westward inland penetration (~11 km)
+    L = 0.13  # Northward track progression (~14.5 km)
+
+    for i in range(steps + 1):
+        u = (i / total_steps) * progress if total_steps > 0 else 0.0
+        pt_lng = origin_lng - A * math.sin(math.pi * u)
+        pt_lat = origin_lat + L * (1.15 * u - 0.15 * (u ** 2))
+        track.append([round(pt_lng, 6), round(pt_lat, 6)])
+
+    if not track:
+        track.append([round(origin_lng, 6), round(origin_lat, 6)])
+    return track
+
+
+def min_distance_to_track_km(p_lat: float, p_lng: float, track_points: List[List[float]]) -> float:
+    """Calculate minimum distance from point (p_lat, p_lng) to a polyline track."""
+    if not track_points:
+        return 999999.0
+    if len(track_points) == 1:
+        return haversine_distance_km(p_lat, p_lng, track_points[0][1], track_points[0][0])
+
+    min_dist = 999999.0
+    for i in range(len(track_points) - 1):
+        a_lng, a_lat = track_points[i]
+        b_lng, b_lat = track_points[i + 1]
+
+        cos_lat = math.cos(math.radians((a_lat + b_lat) / 2.0))
+        bx = (b_lng - a_lng) * 111.320 * cos_lat
+        by = (b_lat - a_lat) * 110.574
+        px = (p_lng - a_lng) * 111.320 * cos_lat
+        py = (p_lat - a_lat) * 110.574
+
+        seg_len_sq = bx * bx + by * by
+        t = 0.0 if seg_len_sq <= 1e-6 else max(0.0, min(1.0, (px * bx + py * by) / seg_len_sq))
+
+        cx = t * bx
+        cy = t * by
+        dist = math.hypot(px - cx, py - cy)
+        if dist < min_dist:
+            min_dist = dist
+
+    return min_dist
+
+
+def create_swept_swath_polygon(track_points: List[List[float]], radius_km: float = 5.0, num_cap_pts: int = 8) -> List[List[float]]:
+    """
+    Generate GeoJSON Polygon coordinates for the continuous hazard corridor (swept swath)
+    along the cyclone polyline path.
+    """
+    if not track_points:
+        return []
+    if len(track_points) == 1:
+        return create_hazard_circle_polygon(track_points[0][0], track_points[0][1], radius_km, 24)
+
+    left_pts = []
+    right_pts = []
+
+    for i in range(len(track_points)):
+        c_lng, c_lat = track_points[i]
+        lat_deg = radius_km / 110.574
+        lon_deg = radius_km / (111.320 * math.cos(math.radians(c_lat)))
+
+        if i == 0:
+            dx = (track_points[1][0] - c_lng) / lon_deg
+            dy = (track_points[1][1] - c_lat) / lat_deg
+        elif i == len(track_points) - 1:
+            dx = (c_lng - track_points[i - 1][0]) / lon_deg
+            dy = (c_lat - track_points[i - 1][1]) / lat_deg
+        else:
+            dx = (track_points[i + 1][0] - track_points[i - 1][0]) / lon_deg
+            dy = (track_points[i + 1][1] - track_points[i - 1][1]) / lat_deg
+
+        length = math.hypot(dx, dy) or 1.0
+        nx = -dy / length
+        ny = dx / length
+
+        left_pts.append([round(c_lng + nx * lon_deg, 6), round(c_lat + ny * lat_deg, 6)])
+        right_pts.append([round(c_lng - nx * lon_deg, 6), round(c_lat - ny * lat_deg, 6)])
+
+    coords = list(left_pts)
+
+    # Semicircular cap at the active eye (end)
+    end_lng, end_lat = track_points[-1]
+    end_lat_deg = radius_km / 110.574
+    end_lon_deg = radius_km / (111.320 * math.cos(math.radians(end_lat)))
+    start_ang = math.atan2((left_pts[-1][1] - end_lat) / end_lat_deg, (left_pts[-1][0] - end_lng) / end_lon_deg)
+    end_ang = math.atan2((right_pts[-1][1] - end_lat) / end_lat_deg, (right_pts[-1][0] - end_lng) / end_lon_deg)
+    if end_ang > start_ang:
+        end_ang -= 2.0 * math.pi
+    for j in range(1, num_cap_pts):
+        a = start_ang + (end_ang - start_ang) * (j / num_cap_pts)
+        coords.append([round(end_lng + math.cos(a) * end_lon_deg, 6), round(end_lat + math.sin(a) * end_lat_deg, 6)])
+
+    coords.extend(reversed(right_pts))
+
+    # Semicircular cap at the track start
+    s_lng, s_lat = track_points[0]
+    s_lat_deg = radius_km / 110.574
+    s_lon_deg = radius_km / (111.320 * math.cos(math.radians(s_lat)))
+    start_ang_s = math.atan2((right_pts[0][1] - s_lat) / s_lat_deg, (right_pts[0][0] - s_lng) / s_lon_deg)
+    end_ang_s = math.atan2((left_pts[0][1] - s_lat) / s_lat_deg, (left_pts[0][0] - s_lng) / s_lon_deg)
+    if end_ang_s > start_ang_s:
+        end_ang_s -= 2.0 * math.pi
+    for j in range(1, num_cap_pts):
+        a = start_ang_s + (end_ang_s - start_ang_s) * (j / num_cap_pts)
+        coords.append([round(s_lng + math.cos(a) * s_lon_deg, 6), round(s_lat + math.sin(a) * s_lat_deg, 6)])
+
+    coords.append(coords[0])
+    return coords

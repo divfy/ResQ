@@ -10,6 +10,8 @@ from ..geospatial.routing import RoadNetwork
 from ..geospatial.spatial import (
     create_hazard_circle_polygon,
     create_tsunami_inundation_polygon,
+    create_swept_swath_polygon,
+    min_distance_to_track_km,
     haversine_distance_km
 )
 from ..disasters import create_disaster_model
@@ -147,6 +149,33 @@ class SimulationInstance:
 
             time_growth = 1.0 + min(0.35, max(0, self.elapsed_seconds) / 360.0)
             affected_pop = int(total_affected * time_growth)
+        elif self.disaster == "cyclone" and zones:
+            # Cyclone Swept Swath model: evaluate each zone against the swept track
+            track = getattr(self.hazard_model, "get_cyclone_track", lambda a, b, s: [[b, a]])(self.origin_lat, self.origin_lng, self.elapsed_seconds)
+            total_affected = 0.0
+            for z in zones:
+                z_lng, z_lat = z["center"]
+                z_pop = z.get("population", 0)
+                z_area = z.get("areaKm2", 25.0)
+                z_vuln = z.get("vulnerability", 0.7)
+                z_radius_km = math.sqrt(max(1.0, z_area) / math.pi)
+                dist_to_track = min_distance_to_track_km(z_lat, z_lng, track)
+
+                if dist_to_track >= (hazard_radius_km + z_radius_km):
+                    overlap_ratio = 0.0
+                elif dist_to_track + z_radius_km <= hazard_radius_km:
+                    overlap_ratio = 1.0
+                else:
+                    overlap_ratio = max(0.0, min(1.0, (hazard_radius_km + z_radius_km - dist_to_track) / (2.0 * z_radius_km)))
+
+                if overlap_ratio > 0:
+                    proximity = max(0.20, 1.0 - dist_to_track / max(0.1, hazard_radius_km + z_radius_km))
+                    sev_factor = min(1.2, (severity / 3.0) ** 0.8)
+                    zone_impact = z_pop * overlap_ratio * proximity * sev_factor * z_vuln
+                    total_affected += zone_impact
+
+            time_growth = 1.0 + min(0.35, max(0, self.elapsed_seconds) / 360.0)
+            affected_pop = int(total_affected * time_growth)
         elif zones:
             total_affected = 0.0
             for z in zones:
@@ -223,13 +252,22 @@ class SimulationInstance:
             "availableBeds": avail_beds
         }
         
-        # 4. Generate Hazard Polygon
+        # 4. Generate Hazard Polygon & Trajectory
+        cyclone_eye = None
+        cyclone_track = None
         if self.disaster == "tsunami":
             progress = getattr(self.hazard_model, "calculate_surge_progress", lambda s: 1.0)(self.elapsed_seconds)
             hazard_polygon = create_tsunami_inundation_polygon(
                 self.origin_lng,
                 self.origin_lat,
                 progress=progress
+            )
+        elif self.disaster == "cyclone":
+            cyclone_track = getattr(self.hazard_model, "get_cyclone_track", lambda a, b, s: [[b, a]])(self.origin_lat, self.origin_lng, self.elapsed_seconds)
+            cyclone_eye = cyclone_track[-1] if cyclone_track else [self.origin_lng, self.origin_lat]
+            hazard_polygon = create_swept_swath_polygon(
+                cyclone_track,
+                radius_km=hazard_radius_km
             )
         else:
             hazard_polygon = create_hazard_circle_polygon(
@@ -275,6 +313,8 @@ class SimulationInstance:
             "power": power,
             "evacuationRoutes": evac_routes,
             "hazardPolygon": hazard_polygon,
+            "cycloneEye": cyclone_eye,
+            "cycloneTrack": cyclone_track,
             "events": events,
             "aiResponse": ai_briefing
         }
@@ -319,6 +359,8 @@ class SimulationInstance:
             "hazardRadiusKm": self.current_state["hazardRadiusKm"],
             "metrics": self.current_state["metrics"],
             "hazardPolygon": self.current_state["hazardPolygon"],
+            "cycloneEye": self.current_state.get("cycloneEye"),
+            "cycloneTrack": self.current_state.get("cycloneTrack"),
             "roads": [
                 {"id": r["id"], "name": r["name"], "blocked": r["blocked"], "damageState": r["damageState"], "coordinates": r["coordinates"]}
                 for r in self.current_state["roads"]

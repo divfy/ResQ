@@ -739,6 +739,12 @@ html.light-mode .layer-pill , body.light-mode .layer-pill {
     box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
 }
 
+.legend-indicator.purple-box {
+    background: rgba(139, 92, 246, 0.45);
+    border: 1px solid #c084fc;
+    box-shadow: 0 0 6px rgba(192, 132, 252, 0.6);
+}
+
 .legend-indicator.blue-dot {
     background: var(--color-flood-light);
     border-radius: 50%;
@@ -2377,4 +2383,80 @@ html.light-mode .prop-action-btn.btn-secondary:hover,
 body.light-mode .prop-action-btn.btn-secondary:hover {
     background: #ffffff;
     border-color: rgba(20, 28, 34, 0.4);
+}
+
+/* ============================================================
+   CYCLONE DYNAMIC VORTEX SWIRL ON MAP
+============================================================ */
+.cyclone-swirl-container {
+    position: relative;
+    width: 140px;
+    height: 140px;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: translate(-50%, -50%);
+    will-change: transform;
+}
+
+.cyclone-tag {
+    position: absolute;
+    top: -16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    background: rgba(15, 23, 42, 0.92);
+    border: 1px solid #c084fc;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.5);
+    font-family: var(--font-mono);
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #f3e8ff;
+    white-space: nowrap;
+    z-index: 10;
+}
+
+.cyclone-vortex-mesh {
+    width: 130px;
+    height: 130px;
+    animation: cyclone-spin 4s linear infinite;
+    transform-origin: center center;
+    filter: drop-shadow(0 0 10px rgba(139, 92, 246, 0.7));
+}
+
+@keyframes cyclone-spin {
+    from {
+        transform: rotate(360deg);
+    }
+    to {
+        transform: rotate(0deg);
+    }
+}
+
+.cyclone-eye-core {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #ffffff 15%, #c084fc 60%, rgba(139, 92, 246, 0.8) 100%);
+    box-shadow: 0 0 14px #c084fc, 0 0 25px rgba(139, 92, 246, 0.8);
+    border: 2px solid #ffffff;
+    animation: cyclone-pulse 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes cyclone-pulse {
+    0% {
+        transform: scale(0.85);
+        box-shadow: 0 0 8px #c084fc;
+    }
+    100% {
+        transform: scale(1.15);
+        box-shadow: 0 0 20px #e879f9, 0 0 30px rgba(192, 132, 252, 0.9);
+    }
 }
