@@ -587,23 +587,57 @@
         return coords;
     }
 
-    function calculateCycloneTrack(originLat, originLng, progress = 1.0, totalSteps = 32) {
-        const prog = Math.max(0.0, Math.min(1.0, progress));
-        const steps = Math.max(1, Math.round(totalSteps * prog));
+    function calculateDynamicCycloneTrack(originLat, originLng, cityLat = 13.0827, cityLng = 80.2707, elapsedSeconds = 0.0, speedDeg = 0.0028) {
+        const totalSteps = Math.max(0, Math.floor(elapsedSeconds));
         const track = [];
-        const A = 0.10; // Westward inland penetration (~11 km)
-        const L = 0.13; // Northward track progression (~14.5 km)
+        track.push([Number(originLng.toFixed(6)), Number(originLat.toFixed(6))]);
+        if (totalSteps <= 0) return track;
 
-        for (let i = 0; i <= steps; i++) {
-            const u = (totalSteps > 0) ? (i / totalSteps) * prog : 0.0;
-            const ptLng = originLng - A * Math.sin(Math.PI * u);
-            const ptLat = originLat + L * (1.15 * u - 0.15 * (u * u));
-            track.push([Number(ptLng.toFixed(6)), Number(ptLat.toFixed(6))]);
-        }
-        if (track.length === 0) {
-            track.push([Number(originLng.toFixed(6)), Number(originLat.toFixed(6))]);
+        const dx = cityLng - originLng;
+        const dy = cityLat - originLat;
+        const dist = Math.hypot(dx, dy);
+
+        const baseAngle = dist > 0.005 ? Math.atan2(dy, dx) : (160 * Math.PI / 180);
+        const tCenter = Math.max(20.0, (dist > 0.005 ? dist : 0.10) / speedDeg);
+
+        let currAngle = baseAngle;
+        let cLng = originLng;
+        let cLat = originLat;
+
+        for (let step = 1; step <= totalSteps; step++) {
+            const s = step;
+            const progressPastCenter = (s - tCenter * 0.75) / (tCenter * 0.5);
+            const turnWeight = 1.0 / (1.0 + Math.exp(-2.5 * progressPastCenter));
+            const turnRate = 0.024 * turnWeight;
+            currAngle -= turnRate;
+            cLng += speedDeg * Math.cos(currAngle);
+            cLat += speedDeg * Math.sin(currAngle);
+            track.push([Number(cLng.toFixed(6)), Number(cLat.toFixed(6))]);
         }
         return track;
+    }
+
+    function calculateCycloneTrack(originLat, originLng, progress = 1.0, totalSteps = 32) {
+        const elapsed = progress * 60.0;
+        return calculateDynamicCycloneTrack(originLat, originLng, 13.0827, 80.2707, elapsed);
+    }
+
+    function getCycloneCategory(windSpeed, stormSurge) {
+        const wind = Number(windSpeed) || 175;
+        const surge = Number(stormSurge) || 3.2;
+        if (wind >= 220 || surge >= 5.5) {
+            return { category: "CAT 5", name: "SUPER CYCLONIC STORM", tag: "CAT 5 · SUPER CYCLONE" };
+        } else if (wind >= 178 || surge >= 4.0) {
+            return { category: "CAT 4", name: "EXTREMELY SEVERE CYCLONIC STORM", tag: "CAT 4 · EXTREME" };
+        } else if (wind >= 154 || surge >= 2.8) {
+            return { category: "CAT 3", name: "VERY SEVERE CYCLONIC STORM", tag: "CAT 3 · VERY SEVERE" };
+        } else if (wind >= 119 || surge >= 1.8) {
+            return { category: "CAT 2", name: "SEVERE CYCLONIC STORM", tag: "CAT 2 · SEVERE" };
+        } else if (wind >= 90 || surge >= 1.2) {
+            return { category: "CAT 1", name: "CYCLONIC STORM", tag: "CAT 1 · CYCLONIC" };
+        } else {
+            return { category: "TROPICAL STORM", name: "DEEP DEPRESSION", tag: "TROPICAL STORM" };
+        }
     }
 
     function createSweptSwathPolygon(trackPoints, radiusKm = 5.0, numCapPts = 8) {
@@ -680,14 +714,29 @@
         if (!map || !map.getSource("hazard-source")) return;
         const isTsunami = (simulationConfig.disaster || "").toLowerCase() === "tsunami";
         const isCyclone = (simulationConfig.disaster || "").toLowerCase() === "cyclone";
+
+        // Cyclone: Before starting the simulation, the cyclone does not exist on the map.
+        // Show zero swath boundaries and zero swirl markers. Only origin pin is shown.
+        if (isCyclone) {
+            removeCycloneSwirlMarker();
+            map.getSource("hazard-source").setData({
+                type: "FeatureCollection",
+                features: []
+            });
+            if (mapRadiusReadout) {
+                const wind = Number(currentProperties.windSpeed) || 175;
+                const surge = Number(currentProperties.stormSurge) || 3.2;
+                const nw = Math.max(0, Math.min(1, (wind - 70) / 210.0));
+                const ns = Math.max(0, Math.min(1, (surge - 0.5) / 7.5));
+                const radius = 2.5 + nw * 7.5 + ns * 4.0;
+                mapRadiusReadout.textContent = `${radius.toFixed(1)} km Gale Swath`;
+            }
+            return;
+        }
+
         let polyCoords;
         if (isTsunami) {
             polyCoords = createTsunamiOceanicPolygon(currentOrigin.longitude, currentOrigin.latitude, 1.0);
-        } else if (isCyclone) {
-            const previewTrack = calculateCycloneTrack(currentOrigin.latitude, currentOrigin.longitude, 1.0);
-            const radius = Number(simulationConfig.hazardRadius) || 5.0;
-            polyCoords = createSweptSwathPolygon(previewTrack, radius);
-            setupCycloneSwirlMarker(currentOrigin.longitude, currentOrigin.latitude);
         } else {
             const radius = Number(simulationConfig.hazardRadius) || 4.2;
             polyCoords = createHazardCirclePolygon(currentOrigin.longitude, currentOrigin.latitude, radius);
@@ -697,7 +746,7 @@
             type: "FeatureCollection",
             features: [{
                 type: "Feature",
-                properties: { name: isTsunami ? "Active Tsunami Inundation Surge" : isCyclone ? "Active Cyclone Swept Swath" : "Active Impact Hazard Zone" },
+                properties: { name: isTsunami ? "Active Tsunami Inundation Surge" : "Active Impact Hazard Zone" },
                 geometry: {
                     type: "Polygon",
                     coordinates: [polyCoords]
@@ -707,8 +756,6 @@
         if (mapRadiusReadout) {
             if (isTsunami) {
                 mapRadiusReadout.textContent = "Ocean Surge";
-            } else if (isCyclone) {
-                mapRadiusReadout.textContent = "C-Track Swath";
             } else {
                 const radius = Number(simulationConfig.hazardRadius) || 4.2;
                 mapRadiusReadout.textContent = `${radius.toFixed(1)} km`;
@@ -716,10 +763,17 @@
         }
     }
 
-    function setupCycloneSwirlMarker(lng, lat) {
+    function setupCycloneSwirlMarker(lng, lat, categoryInfo = null) {
         if (!map) return;
+        const cat = categoryInfo || getCycloneCategory(currentProperties.windSpeed, currentProperties.stormSurge);
+        const catTag = cat.tag || "CAT 3 · EYE";
+
         if (cycloneSwirlMarker) {
             cycloneSwirlMarker.setLngLat([lng, lat]);
+            const tagEl = cycloneSwirlMarker.getElement().querySelector(".cyclone-tag");
+            if (tagEl) {
+                tagEl.innerHTML = `<span>🌀</span> <span>${catTag} · EYE</span>`;
+            }
             return;
         }
 
@@ -728,7 +782,7 @@
         el.id = "cycloneSwirlMarker";
         el.title = "Cyclone Vortex & Eye Wall";
         el.innerHTML = `
-            <div class="cyclone-tag"><span>🌀</span> <span>CAT 3 · EYE</span></div>
+            <div class="cyclone-tag"><span>🌀</span> <span>${catTag} · EYE</span></div>
             <svg class="cyclone-vortex-mesh" viewBox="0 0 100 100" aria-hidden="true">
                 <path d="M 50 50 Q 70 30 88 50 Q 75 75 50 50" fill="rgba(192, 132, 252, 0.5)"/>
                 <path d="M 50 50 Q 30 70 50 88 Q 75 75 50 50" fill="rgba(139, 92, 246, 0.6)"/>
@@ -778,10 +832,10 @@
                     <span class="badge-text">${disasterLabel} ORIGIN</span>
                 </div>
                 <div class="origin-pointer-body">
-                    <svg class="origin-pointer-svg" viewBox="0 0 36 50" width="36" height="50" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <svg class="origin-pointer-svg" viewBox="0 0 32 48" width="32" height="48" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <defs>
                             <filter id="originGlow" x="-30%" y="-30%" width="160%" height="160%">
-                                <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#ef4444" flood-opacity="0.9"/>
+                                <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#ef4444" flood-opacity="0.8"/>
                             </filter>
                             <linearGradient id="pinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                                 <stop offset="0%" stop-color="#ff4444"/>
@@ -789,18 +843,18 @@
                             </linearGradient>
                         </defs>
                         <!-- Ground shadow ellipse -->
-                        <ellipse cx="18" cy="48" rx="7" ry="2.5" fill="rgba(0,0,0,0.55)"/>
-                        <!-- Teardrop pointer body with sharp needle tip -->
-                        <path d="M18 48 C 18 48, 3 31, 3 18 C 3 9.715, 9.715 3, 18 3 C 26.285 3, 33 9.715, 33 18 C 33 31, 18 48, 18 48 Z" 
-                              fill="url(#pinGrad)" stroke="#ffffff" stroke-width="2.5" filter="url(#originGlow)"/>
+                        <ellipse cx="16" cy="47" rx="6" ry="1.8" fill="rgba(0,0,0,0.5)"/>
+                        <!-- Teardrop pointer body with needle tip terminating exactly at bottom (16, 48) -->
+                        <path d="M16 48 C 16 48, 2 30, 2 16 C 2 8.268, 8.268 2, 16 2 C 23.732 2, 30 8.268, 30 16 C 30 30, 16 48, 16 48 Z" 
+                              fill="url(#pinGrad)" stroke="#ffffff" stroke-width="2.2" filter="url(#originGlow)"/>
                         <!-- Central tactical reticle rings -->
-                        <circle cx="18" cy="18" r="9" fill="#0d1117" stroke="#ffffff" stroke-width="1.5"/>
-                        <circle cx="18" cy="18" r="6" fill="#facc15"/>
-                        <circle cx="18" cy="18" r="2.5" fill="#ef4444"/>
-                        <line x1="18" y1="5" x2="18" y2="9" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
-                        <line x1="18" y1="27" x2="18" y2="31" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
-                        <line x1="5" y1="18" x2="9" y2="18" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
-                        <line x1="27" y1="18" x2="31" y2="18" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+                        <circle cx="16" cy="16" r="8" fill="#0d1117" stroke="#ffffff" stroke-width="1.4"/>
+                        <circle cx="16" cy="16" r="5" fill="#facc15"/>
+                        <circle cx="16" cy="16" r="2.2" fill="#ef4444"/>
+                        <line x1="16" y1="4" x2="16" y2="7.5" stroke="#ffffff" stroke-width="1.3" stroke-linecap="round"/>
+                        <line x1="16" y1="24.5" x2="16" y2="28" stroke="#ffffff" stroke-width="1.3" stroke-linecap="round"/>
+                        <line x1="4" y1="16" x2="7.5" y2="16" stroke="#ffffff" stroke-width="1.3" stroke-linecap="round"/>
+                        <line x1="24.5" y1="16" x2="28" y2="16" stroke="#ffffff" stroke-width="1.3" stroke-linecap="round"/>
                     </svg>
                 </div>
                 <div class="origin-target-crosshair"></div>
@@ -1017,6 +1071,23 @@
                 valDisplay.textContent = `${val} ${prop.unit}`;
                 currentProperties[prop.id] = val;
 
+                // If disaster is cyclone, dynamically update category and swath telemetry readout
+                if ((simulationConfig.disaster || "").toLowerCase() === "cyclone") {
+                    const wind = Number(currentProperties.windSpeed) || 175;
+                    const surge = Number(currentProperties.stormSurge) || 3.2;
+                    const cat = getCycloneCategory(wind, surge);
+                    if (cycloneSwirlMarker) {
+                        const tagEl = cycloneSwirlMarker.getElement().querySelector(".cyclone-tag");
+                        if (tagEl) tagEl.innerHTML = `<span>🌀</span> <span>${cat.tag} · EYE</span>`;
+                    }
+                    if (mapRadiusReadout) {
+                        const nw = Math.max(0, Math.min(1, (wind - 70) / 210.0));
+                        const ns = Math.max(0, Math.min(1, (surge - 0.5) / 7.5));
+                        const radius = 2.5 + nw * 7.5 + ns * 4.0;
+                        mapRadiusReadout.textContent = `${radius.toFixed(1)} km Gale Swath`;
+                    }
+                }
+
                 // Sync to backend simulation
                 if (simulationId) {
                     try {
@@ -1076,6 +1147,22 @@
             if (slider && val !== undefined) slider.value = val;
             if (display && val !== undefined) display.textContent = `${val} ${p.unit}`;
         });
+
+        if (disaster === "cyclone") {
+            const wind = Number(currentProperties.windSpeed) || 175;
+            const surge = Number(currentProperties.stormSurge) || 3.2;
+            const cat = getCycloneCategory(wind, surge);
+            if (cycloneSwirlMarker) {
+                const tagEl = cycloneSwirlMarker.getElement().querySelector(".cyclone-tag");
+                if (tagEl) tagEl.innerHTML = `<span>🌀</span> <span>${cat.tag} · EYE</span>`;
+            }
+            if (mapRadiusReadout) {
+                const nw = Math.max(0, Math.min(1, (wind - 70) / 210.0));
+                const ns = Math.max(0, Math.min(1, (surge - 0.5) / 7.5));
+                const radius = 2.5 + nw * 7.5 + ns * 4.0;
+                mapRadiusReadout.textContent = `${radius.toFixed(1)} km Gale Swath`;
+            }
+        }
     }
 
     /* ============================================================
@@ -1154,35 +1241,47 @@
     function updateMapboxLayers(state) {
         if (!map || !map.isStyleLoaded()) return;
 
-        // Cyclone Swirl & Eye Marker
+        // Active simulation check: evacuation routes, blocked roads, and cyclone swirl/swath ONLY appear after the sim starts!
+        const isSimActive = isSimulationStarted || (state && state.status === "RUNNING") || (state && state.elapsedSeconds > 0);
         const isCyclone = (simulationConfig.disaster || "").toLowerCase() === "cyclone";
+
+        // Cyclone Swirl & Eye Marker: ONLY exists if simulation is active AND elapsedSeconds > 0
         if (isCyclone) {
-            if (state.cycloneEye && Array.isArray(state.cycloneEye) && state.cycloneEye.length === 2) {
-                setupCycloneSwirlMarker(state.cycloneEye[0], state.cycloneEye[1]);
-            } else if (currentOrigin) {
-                setupCycloneSwirlMarker(currentOrigin.longitude, currentOrigin.latitude);
+            if (isSimActive && state.cycloneEye && Array.isArray(state.cycloneEye) && state.cycloneEye.length === 2 && state.elapsedSeconds > 0) {
+                setupCycloneSwirlMarker(state.cycloneEye[0], state.cycloneEye[1], state.cycloneCategory);
+            } else {
+                removeCycloneSwirlMarker();
             }
         } else {
             removeCycloneSwirlMarker();
         }
 
-        // A. Hazard Polygon Envelope
-        if (state.hazardPolygon && map.getSource("hazard-source")) {
-            map.getSource("hazard-source").setData({
-                type: "FeatureCollection",
-                features: [{
-                    type: "Feature",
-                    properties: { name: isCyclone ? "Active Cyclone Swept Swath" : "Active Impact Hazard Zone" },
-                    geometry: {
-                        type: "Polygon",
-                        coordinates: [state.hazardPolygon]
-                    }
-                }]
-            });
+        // A. Hazard Polygon Envelope: Only if sim is active or non-cyclone initial state
+        if (map.getSource("hazard-source")) {
+            if (isCyclone && (!isSimActive || !state.elapsedSeconds || state.elapsedSeconds === 0)) {
+                map.getSource("hazard-source").setData({
+                    type: "FeatureCollection",
+                    features: []
+                });
+            } else if (state.hazardPolygon && Array.isArray(state.hazardPolygon) && state.hazardPolygon.length > 0) {
+                map.getSource("hazard-source").setData({
+                    type: "FeatureCollection",
+                    features: [{
+                        type: "Feature",
+                        properties: { name: isCyclone ? "Active Cyclone Swept Swath" : "Active Impact Hazard Zone" },
+                        geometry: {
+                            type: "Polygon",
+                            coordinates: [state.hazardPolygon]
+                        }
+                    }]
+                });
+            } else {
+                map.getSource("hazard-source").setData({
+                    type: "FeatureCollection",
+                    features: []
+                });
+            }
         }
-
-        // Active simulation check: evacuation routes and blocked roads should only appear after the sim starts!
-        const isSimActive = isSimulationStarted || (state && state.status === "RUNNING") || (state && state.elapsedSeconds > 0);
 
         // B. Blocked Roads (Red line layer) - Only visible when simulation is active
         if (map.getSource("blocked-roads-source")) {
@@ -1333,6 +1432,10 @@
         if (!simulationId) return;
         try {
             isSimulationStarted = false;
+            removeCycloneSwirlMarker();
+            if (map && map.getSource("hazard-source")) {
+                map.getSource("hazard-source").setData({ type: "FeatureCollection", features: [] });
+            }
             const resetState = await api.resetSimulation(simulationId);
             if (wsConnection) wsConnection.send("reset");
             isPaused = true;

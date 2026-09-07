@@ -76,26 +76,63 @@ def create_tsunami_inundation_polygon(
     return coords
 
 
-def calculate_cyclone_track(origin_lat: float, origin_lng: float, progress: float = 1.0, total_steps: int = 32) -> List[List[float]]:
+def calculate_dynamic_cyclone_track(
+    origin_lat: float,
+    origin_lng: float,
+    city_lat: float = 13.0827,
+    city_lng: float = 80.2707,
+    elapsed_seconds: float = 0.0,
+    speed_deg: float = 0.0028
+) -> List[List[float]]:
     """
-    Generate parametric C-shaped cyclone trajectory starting at (origin_lng, origin_lat).
-    The cyclone moves westward across the city and recurves back toward the ocean / east.
+    Generate dynamic, open-ended cyclone trajectory starting at (origin_lng, origin_lat)
+    and steering towards the metropolitan city center (city_lng, city_lat).
+    As the cyclone nears and crosses the metropolitan area, Coriolis steering dynamically
+    recurves its path northward / northeastward. The path advances continuously as elapsed_seconds
+    increases without stopping or clamping.
     """
-    progress = max(0.0, min(1.0, progress))
-    steps = max(1, int(total_steps * progress))
+    total_steps = max(0, int(elapsed_seconds))
     track = []
-    A = 0.10  # Westward inland penetration (~11 km)
-    L = 0.13  # Northward track progression (~14.5 km)
+    c_lng, c_lat = origin_lng, origin_lat
+    track.append([round(c_lng, 6), round(c_lat, 6)])
 
-    for i in range(steps + 1):
-        u = (i / total_steps) * progress if total_steps > 0 else 0.0
-        pt_lng = origin_lng - A * math.sin(math.pi * u)
-        pt_lat = origin_lat + L * (1.15 * u - 0.15 * (u ** 2))
-        track.append([round(pt_lng, 6), round(pt_lat, 6)])
+    if total_steps <= 0:
+        return track
 
-    if not track:
-        track.append([round(origin_lng, 6), round(origin_lat, 6)])
+    dx = city_lng - origin_lng
+    dy = city_lat - origin_lat
+    dist = math.hypot(dx, dy)
+
+    if dist > 0.005:
+        base_angle = math.atan2(dy, dx)
+    else:
+        base_angle = math.radians(160)  # WNW default when already inside city
+        dist = 0.10
+
+    t_center = max(20.0, dist / speed_deg)
+
+    curr_angle = base_angle
+    for step in range(1, total_steps + 1):
+        s = float(step)
+        # Turn smoothly towards North/Northeast as it approaches and sweeps across the city
+        progress_past_center = (s - t_center * 0.75) / (t_center * 0.5)
+        turn_weight = 1.0 / (1.0 + math.exp(-2.5 * progress_past_center))
+        turn_rate = 0.024 * turn_weight
+        # Turning toward North means moving towards +lat (y) and then +lng (x)
+        curr_angle -= turn_rate
+        c_lng += speed_deg * math.cos(curr_angle)
+        c_lat += speed_deg * math.sin(curr_angle)
+        track.append([round(c_lng, 6), round(c_lat, 6)])
+
     return track
+
+
+def calculate_cyclone_track(origin_lat: float, origin_lng: float, progress: float = 1.0, total_steps: int = 32, city_lat: float = 13.0827, city_lng: float = 80.2707) -> List[List[float]]:
+    """
+    Adapter generating dynamic cyclone track based on normalized progress or steps.
+    """
+    elapsed = max(0.0, progress * 60.0)
+    return calculate_dynamic_cyclone_track(origin_lat, origin_lng, city_lat=city_lat, city_lng=city_lng, elapsed_seconds=elapsed)
 
 
 def min_distance_to_track_km(p_lat: float, p_lng: float, track_points: List[List[float]]) -> float:

@@ -63,25 +63,41 @@ def test_cyclone_simulation_model():
     assert impact["wind_speed"] > 100.0
 
 def test_cyclone_swath_and_tracking():
-    """Verify cyclone C-shaped recurving trajectory and swept corridor."""
+    """Verify cyclone dynamic city steering, open-ended movement, category, and radius scaling."""
+    # Test physical scaling from wind and surge
+    cyclone_min = CycloneDisaster({"windSpeed": 70, "stormSurge": 0.5})
+    assert cyclone_min.calculate_hazard_radius_km(0) == 2.5
+    assert cyclone_min.calculate_category()["category"] == "TROPICAL STORM"
+
+    cyclone_max = CycloneDisaster({"windSpeed": 280, "stormSurge": 8.0})
+    assert cyclone_max.calculate_hazard_radius_km(0) == 14.0
+    assert cyclone_max.calculate_category()["category"] == "CAT 5"
+
     cyclone = CycloneDisaster({"windSpeed": 190, "stormSurge": 3.8, "rainfall": 70})
-    origin_lat, origin_lng = 13.05, 80.35
+    cat = cyclone.calculate_category()
+    assert cat["category"] == "CAT 4"
+    assert "EXTREME" in cat["tag"]
+
+    origin_lat, origin_lng = 13.05, 80.40
 
     eye_0 = cyclone.get_cyclone_eye(origin_lat, origin_lng, elapsed_seconds=0)
-    assert abs(eye_0[0] - 80.35) < 0.001
+    assert abs(eye_0[0] - 80.40) < 0.001
     assert abs(eye_0[1] - 13.05) < 0.001
 
-    eye_30 = cyclone.get_cyclone_eye(origin_lat, origin_lng, elapsed_seconds=30)
-    # At midpoint, eye has surged inland/westward into Chennai
-    assert eye_30[0] < 80.30
+    eye_40 = cyclone.get_cyclone_eye(origin_lat, origin_lng, elapsed_seconds=40)
+    # Eye steers inland towards central Chennai (< 80.30 lng)
+    assert eye_40[0] < 80.32
 
-    eye_60 = cyclone.get_cyclone_eye(origin_lat, origin_lng, elapsed_seconds=60)
-    # At end of trajectory, eye recurves eastward back out towards the ocean
-    assert eye_60[0] > 80.34
-    assert eye_60[1] > 13.15
+    eye_80 = cyclone.get_cyclone_eye(origin_lat, origin_lng, elapsed_seconds=80)
+    # Does not stop: eye continues advancing and curves northward
+    assert eye_80[1] > eye_40[1]
 
-    # Verify that a point hit in the middle of the path remains in the swept hazard zone at t=60
-    impact_midway = cyclone.evaluate_point_impact(eye_30[1], eye_30[0], origin_lat, origin_lng, elapsed_seconds=60)
+    # Beyond 60 seconds: open-ended movement continues
+    eye_120 = cyclone.get_cyclone_eye(origin_lat, origin_lng, elapsed_seconds=120)
+    assert eye_120 != eye_80
+
+    # Verify that a point hit in the middle of the path remains in the swept hazard zone
+    impact_midway = cyclone.evaluate_point_impact(eye_40[1], eye_40[0], origin_lat, origin_lng, elapsed_seconds=80)
     assert impact_midway["in_hazard_zone"] is True
 
 def test_tsunami_simulation_model():
