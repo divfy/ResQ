@@ -246,7 +246,10 @@
         if (!map) return;
         const newStyle = getTileStyle(isLightMode());
 
+        let reapplyDone = false;
         const reapplyMapData = async () => {
+            if (reapplyDone) return;
+            reapplyDone = true;
             try {
                 await loadStaticCityInfrastructure();
                 setupDisasterLayers();
@@ -261,9 +264,16 @@
             }
         };
 
-        // Attach style.load listener before invoking setStyle to prevent race conditions
+        // MapLibre GL JS setStyle defaults to { diff: true }, which removes custom layers
+        // without emitting "style.load". Passing { diff: false } forces a full style rebuild
+        // that reliably fires "style.load", while "idle" serves as a guaranteed safety fallback.
         map.once("style.load", reapplyMapData);
-        map.setStyle(newStyle);
+        map.once("idle", () => {
+            if (!map.getSource("hazard-source")) {
+                reapplyMapData();
+            }
+        });
+        map.setStyle(newStyle, { diff: false });
     }
 
     /* ------------------------------------------------------------
@@ -601,7 +611,7 @@
         }
 
         // Reapply current active simulation data or initial preview
-        if (latestSimulationState && isSimulationStarted) {
+        if (latestSimulationState) {
             updateMapboxLayers(latestSimulationState);
         } else {
             updatePreviewHazardPolygon();
