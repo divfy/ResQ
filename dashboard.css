@@ -1859,12 +1859,12 @@ body.light-mode .origin-map-popup .maplibregl-popup-content {
 }
 
 /* ============================================================
-   CYCLONE VORTEX & DYNAMIC EYE MARKER
+   CYCLONE VORTEX & DYNAMIC EYE MARKER (6-BLADE METEOROLOGY ICON)
 ============================================================ */
 .cyclone-swirl-container {
     position: relative !important;
-    width: 90px !important;
-    height: 90px !important;
+    width: 76px !important;
+    height: 76px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -1907,17 +1907,45 @@ body.light-mode .cyclone-tag,
     box-shadow: 0 4px 12px rgba(107, 33, 168, 0.25), 0 0 8px rgba(168, 85, 247, 0.4);
 }
 
-/* Atmospheric rotating spiral vortex mesh */
+/* Atmospheric rotating 6-arm cyclone pinwheel icon */
 .cyclone-vortex-mesh {
     position: absolute;
     top: 0;
     left: 0;
-    width: 90px;
-    height: 90px;
+    width: 76px;
+    height: 76px;
     pointer-events: none;
-    animation: cycloneSpinCounterClockwise 2.8s linear infinite;
-    filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.7));
+    animation: cycloneSpinCounterClockwise 3.2s linear infinite;
     transform-origin: 50% 50%;
+}
+
+.cyclone-pinwheel-path {
+    fill: #334155;
+    stroke: #ffffff;
+    stroke-width: 1.4;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.45));
+}
+
+/* Light mode styling: high contrast dark slate exactly matching Image 2 */
+html.light-mode .cyclone-pinwheel-path,
+body.light-mode .cyclone-pinwheel-path,
+[data-theme="light"] .cyclone-pinwheel-path {
+    fill: #2c3e50;
+    stroke: #ffffff;
+    stroke-width: 1.6;
+    filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.35));
+}
+
+/* Dark mode styling: vibrant luminous violet with atmospheric glow */
+html:not(.light-mode) .cyclone-pinwheel-path,
+body:not(.light-mode) .cyclone-pinwheel-path,
+[data-theme="dark"] .cyclone-pinwheel-path {
+    fill: #c084fc;
+    stroke: #7c3aed;
+    stroke-width: 1.2;
+    filter: drop-shadow(0 0 14px rgba(168, 85, 247, 0.85));
 }
 
 @keyframes cycloneSpinCounterClockwise {
@@ -1926,30 +1954,6 @@ body.light-mode .cyclone-tag,
     }
     100% {
         transform: rotate(-360deg);
-    }
-}
-
-/* Pulsing central low-pressure eye core */
-.cyclone-eye-core {
-    position: absolute;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: radial-gradient(circle, #f43f5e 25%, #a855f7 75%, transparent 100%);
-    border: 2px solid #ffffff;
-    box-shadow: 0 0 12px #f43f5e, 0 0 22px #a855f7;
-    z-index: 22;
-    animation: cycloneEyePulse 1.4s ease-in-out infinite alternate;
-}
-
-@keyframes cycloneEyePulse {
-    0% {
-        transform: scale(0.85);
-        box-shadow: 0 0 8px #f43f5e, 0 0 16px rgba(168, 85, 247, 0.5);
-    }
-    100% {
-        transform: scale(1.18);
-        box-shadow: 0 0 16px #f43f5e, 0 0 28px rgba(168, 85, 247, 0.9);
     }
 }
 

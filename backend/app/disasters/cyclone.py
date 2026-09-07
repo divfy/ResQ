@@ -52,12 +52,13 @@ class CycloneDisaster(BaseDisaster):
         Calculates destructive gale-force wind radius (km).
         The hazard area scales directly with the user-manipulated factors:
         MAX SUSTAINED WINDS (70 to 280 km/h) and STORM SURGE HEIGHT (0.5 to 8.0 m).
+        Scales between 1.0 km (minimal) and 4.0 km (Cat 5 Super Cyclone).
         """
         wind = self.properties.get("windSpeed", 175)
         surge = self.properties.get("stormSurge", 3.2)
         nw = self._clamp((wind - 70.0) / 210.0)
         ns = self._clamp((surge - 0.5) / 7.5)
-        radius = 2.5 + nw * 7.5 + ns * 4.0
+        radius = 1.0 + nw * 2.0 + ns * 1.0
         return round(radius, 2)
 
     def get_cyclone_track(

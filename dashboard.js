@@ -728,7 +728,7 @@
                 const surge = Number(currentProperties.stormSurge) || 3.2;
                 const nw = Math.max(0, Math.min(1, (wind - 70) / 210.0));
                 const ns = Math.max(0, Math.min(1, (surge - 0.5) / 7.5));
-                const radius = 2.5 + nw * 7.5 + ns * 4.0;
+                const radius = 1.0 + nw * 2.0 + ns * 1.0;
                 mapRadiusReadout.textContent = `${radius.toFixed(1)} km Gale Swath`;
             }
             return;
@@ -783,31 +783,10 @@
         el.title = `Active Cyclone Vortex — ${catTag}`;
         el.innerHTML = `
             <div class="cyclone-tag"><span>🌀</span> <span>${catTag}</span></div>
-            <svg class="cyclone-vortex-mesh" viewBox="0 0 100 100" width="90" height="90" aria-hidden="true">
-                <defs>
-                    <radialGradient id="vortexGlowGrad" cx="50%" cy="50%" r="50%">
-                        <stop offset="0%" stop-color="#c084fc" stop-opacity="0.85"/>
-                        <stop offset="55%" stop-color="#8b5cf6" stop-opacity="0.45"/>
-                        <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
-                    </radialGradient>
-                    <linearGradient id="vortexArm1" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stop-color="#f5d0fe" stop-opacity="0.95"/>
-                        <stop offset="50%" stop-color="#c084fc" stop-opacity="0.75"/>
-                        <stop offset="100%" stop-color="#7c3aed" stop-opacity="0.15"/>
-                    </linearGradient>
-                    <linearGradient id="vortexArm2" x1="100%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stop-color="#f472b6" stop-opacity="0.9"/>
-                        <stop offset="50%" stop-color="#a855f7" stop-opacity="0.7"/>
-                        <stop offset="100%" stop-color="#6366f1" stop-opacity="0.15"/>
-                    </linearGradient>
-                </defs>
-                <circle cx="50" cy="50" r="46" fill="url(#vortexGlowGrad)"/>
-                <path d="M 50 50 Q 72 26 92 48 Q 78 78 50 50" fill="url(#vortexArm1)"/>
-                <path d="M 50 50 Q 28 74 48 92 Q 78 78 50 50" fill="url(#vortexArm2)"/>
-                <path d="M 50 50 Q 28 26 8 48 Q 22 22 50 50" fill="url(#vortexArm1)"/>
-                <path d="M 50 50 Q 72 74 52 8 Q 22 22 50 50" fill="url(#vortexArm2)"/>
+            <svg class="cyclone-vortex-mesh" viewBox="0 0 100 100" width="76" height="76" aria-hidden="true">
+                <!-- 6-blade cyclonic vortex silhouette matching meteorology standard icon -->
+                <path class="cyclone-pinwheel-path" d="M 32.27 30.31 C 41.46 18.12 68.60 10.12 90.28 24.83 C 80.64 24.29 64.84 26.25 58.19 24.80 C 73.33 26.67 93.83 46.17 91.94 72.30 C 87.59 63.68 77.98 50.98 75.92 44.49 C 81.88 58.54 75.24 86.04 51.66 97.47 C 56.95 89.39 63.15 74.72 67.73 69.69 C 58.54 81.88 31.40 89.88 9.72 75.17 C 19.36 75.71 35.16 73.75 41.81 75.20 C 26.67 73.33 6.17 53.83 8.06 27.70 C 12.41 36.32 22.02 49.02 24.08 55.51 C 18.12 41.46 24.76 13.96 48.34 2.53 C 43.05 10.61 36.85 25.28 32.27 30.31 Z M 50 36.5 A 13.5 13.5 0 1 0 50 63.5 A 13.5 13.5 0 1 0 50 36.5 Z" fill-rule="evenodd"/>
             </svg>
-            <div class="cyclone-eye-core"></div>
         `;
 
         cycloneSwirlMarker = new maplibregl.Marker({
@@ -1098,10 +1077,10 @@
                         const tagEl = cycloneSwirlMarker.getElement().querySelector(".cyclone-tag");
                         if (tagEl) tagEl.innerHTML = `<span>🌀</span> <span>${cat.tag} · EYE</span>`;
                     }
-                    if (mapRadiusReadout) {
-                        const nw = Math.max(0, Math.min(1, (wind - 70) / 210.0));
-                        const ns = Math.max(0, Math.min(1, (surge - 0.5) / 7.5));
-                        const radius = 2.5 + nw * 7.5 + ns * 4.0;
+                    if (disaster === "cyclone" && mapRadiusReadout) {
+                        const nw = Math.max(0, Math.min(1, (currentProperties.windSpeed - 70) / 210.0));
+                        const ns = Math.max(0, Math.min(1, (currentProperties.stormSurge - 0.5) / 7.5));
+                        const radius = 1.0 + nw * 2.0 + ns * 1.0;
                         mapRadiusReadout.textContent = `${radius.toFixed(1)} km Gale Swath`;
                     }
                 }
@@ -1172,12 +1151,12 @@
             const cat = getCycloneCategory(wind, surge);
             if (cycloneSwirlMarker) {
                 const tagEl = cycloneSwirlMarker.getElement().querySelector(".cyclone-tag");
-                if (tagEl) tagEl.innerHTML = `<span>🌀</span> <span>${cat.tag} · EYE</span>`;
+                if (tagEl) tagEl.innerHTML = `<span>🌀</span> <span>${cat.tag}</span>`;
             }
             if (mapRadiusReadout) {
                 const nw = Math.max(0, Math.min(1, (wind - 70) / 210.0));
                 const ns = Math.max(0, Math.min(1, (surge - 0.5) / 7.5));
-                const radius = 2.5 + nw * 7.5 + ns * 4.0;
+                const radius = 1.0 + nw * 2.0 + ns * 1.0;
                 mapRadiusReadout.textContent = `${radius.toFixed(1)} km Gale Swath`;
             }
         }

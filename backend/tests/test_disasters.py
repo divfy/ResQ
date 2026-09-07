@@ -66,11 +66,11 @@ def test_cyclone_swath_and_tracking():
     """Verify cyclone dynamic city steering, open-ended movement, category, and radius scaling."""
     # Test physical scaling from wind and surge
     cyclone_min = CycloneDisaster({"windSpeed": 70, "stormSurge": 0.5})
-    assert cyclone_min.calculate_hazard_radius_km(0) == 2.5
+    assert cyclone_min.calculate_hazard_radius_km(0) == 1.0
     assert cyclone_min.calculate_category()["category"] == "TROPICAL STORM"
 
     cyclone_max = CycloneDisaster({"windSpeed": 280, "stormSurge": 8.0})
-    assert cyclone_max.calculate_hazard_radius_km(0) == 14.0
+    assert cyclone_max.calculate_hazard_radius_km(0) == 4.0
     assert cyclone_max.calculate_category()["category"] == "CAT 5"
 
     cyclone = CycloneDisaster({"windSpeed": 190, "stormSurge": 3.8, "rainfall": 70})
