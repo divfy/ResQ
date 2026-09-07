@@ -375,6 +375,7 @@ class SimulationInstance:
             "event": "simulation.tick",
             "simulationId": self.simulation_id,
             "simulationTime": self.elapsed_seconds,
+            "elapsedSeconds": self.elapsed_seconds,
             "status": self.status,
             "severity": self.current_state["severity"],
             "hazardRadiusKm": self.current_state["hazardRadiusKm"],

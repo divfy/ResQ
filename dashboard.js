@@ -772,7 +772,7 @@
             cycloneSwirlMarker.setLngLat([lng, lat]);
             const tagEl = cycloneSwirlMarker.getElement().querySelector(".cyclone-tag");
             if (tagEl) {
-                tagEl.innerHTML = `<span>🌀</span> <span>${catTag} · EYE</span>`;
+                tagEl.innerHTML = `<span>🌀</span> <span>${catTag}</span>`;
             }
             return;
         }
@@ -780,14 +780,32 @@
         const el = document.createElement("div");
         el.className = "cyclone-swirl-container";
         el.id = "cycloneSwirlMarker";
-        el.title = "Cyclone Vortex & Eye Wall";
+        el.title = `Active Cyclone Vortex — ${catTag}`;
         el.innerHTML = `
-            <div class="cyclone-tag"><span>🌀</span> <span>${catTag} · EYE</span></div>
-            <svg class="cyclone-vortex-mesh" viewBox="0 0 100 100" aria-hidden="true">
-                <path d="M 50 50 Q 70 30 88 50 Q 75 75 50 50" fill="rgba(192, 132, 252, 0.5)"/>
-                <path d="M 50 50 Q 30 70 50 88 Q 75 75 50 50" fill="rgba(139, 92, 246, 0.6)"/>
-                <path d="M 50 50 Q 30 30 12 50 Q 25 25 50 50" fill="rgba(192, 132, 252, 0.5)"/>
-                <path d="M 50 50 Q 70 30 50 12 Q 25 25 50 50" fill="rgba(139, 92, 246, 0.6)"/>
+            <div class="cyclone-tag"><span>🌀</span> <span>${catTag}</span></div>
+            <svg class="cyclone-vortex-mesh" viewBox="0 0 100 100" width="90" height="90" aria-hidden="true">
+                <defs>
+                    <radialGradient id="vortexGlowGrad" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stop-color="#c084fc" stop-opacity="0.85"/>
+                        <stop offset="55%" stop-color="#8b5cf6" stop-opacity="0.45"/>
+                        <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+                    </radialGradient>
+                    <linearGradient id="vortexArm1" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#f5d0fe" stop-opacity="0.95"/>
+                        <stop offset="50%" stop-color="#c084fc" stop-opacity="0.75"/>
+                        <stop offset="100%" stop-color="#7c3aed" stop-opacity="0.15"/>
+                    </linearGradient>
+                    <linearGradient id="vortexArm2" x1="100%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#f472b6" stop-opacity="0.9"/>
+                        <stop offset="50%" stop-color="#a855f7" stop-opacity="0.7"/>
+                        <stop offset="100%" stop-color="#6366f1" stop-opacity="0.15"/>
+                    </linearGradient>
+                </defs>
+                <circle cx="50" cy="50" r="46" fill="url(#vortexGlowGrad)"/>
+                <path d="M 50 50 Q 72 26 92 48 Q 78 78 50 50" fill="url(#vortexArm1)"/>
+                <path d="M 50 50 Q 28 74 48 92 Q 78 78 50 50" fill="url(#vortexArm2)"/>
+                <path d="M 50 50 Q 28 26 8 48 Q 22 22 50 50" fill="url(#vortexArm1)"/>
+                <path d="M 50 50 Q 72 74 52 8 Q 22 22 50 50" fill="url(#vortexArm2)"/>
             </svg>
             <div class="cyclone-eye-core"></div>
         `;
@@ -1224,7 +1242,8 @@
         }
 
         // Track simulation active state
-        if (state.status === "RUNNING" || (state.elapsedSeconds && state.elapsedSeconds > 0)) {
+        const elapsedSec = (state.elapsedSeconds !== undefined) ? state.elapsedSeconds : ((state.simulationTime !== undefined) ? state.simulationTime : 0);
+        if (state.status === "RUNNING" || elapsedSec > 0) {
             isSimulationStarted = true;
         }
 
@@ -1241,13 +1260,14 @@
     function updateMapboxLayers(state) {
         if (!map || !map.isStyleLoaded()) return;
 
+        const elapsedSec = (state.elapsedSeconds !== undefined) ? state.elapsedSeconds : ((state.simulationTime !== undefined) ? state.simulationTime : 0);
         // Active simulation check: evacuation routes, blocked roads, and cyclone swirl/swath ONLY appear after the sim starts!
-        const isSimActive = isSimulationStarted || (state && state.status === "RUNNING") || (state && state.elapsedSeconds > 0);
+        const isSimActive = isSimulationStarted || (state && state.status === "RUNNING") || (elapsedSec > 0);
         const isCyclone = (simulationConfig.disaster || "").toLowerCase() === "cyclone";
 
-        // Cyclone Swirl & Eye Marker: ONLY exists if simulation is active AND elapsedSeconds > 0
+        // Cyclone Swirl & Eye Marker: ONLY exists if simulation is active AND elapsedSec > 0
         if (isCyclone) {
-            if (isSimActive && state.cycloneEye && Array.isArray(state.cycloneEye) && state.cycloneEye.length === 2 && state.elapsedSeconds > 0) {
+            if (isSimActive && state.cycloneEye && Array.isArray(state.cycloneEye) && state.cycloneEye.length === 2 && elapsedSec > 0) {
                 setupCycloneSwirlMarker(state.cycloneEye[0], state.cycloneEye[1], state.cycloneCategory);
             } else {
                 removeCycloneSwirlMarker();
@@ -1258,7 +1278,7 @@
 
         // A. Hazard Polygon Envelope: Only if sim is active or non-cyclone initial state
         if (map.getSource("hazard-source")) {
-            if (isCyclone && (!isSimActive || !state.elapsedSeconds || state.elapsedSeconds === 0)) {
+            if (isCyclone && (!isSimActive || elapsedSec === 0)) {
                 map.getSource("hazard-source").setData({
                     type: "FeatureCollection",
                     features: []
