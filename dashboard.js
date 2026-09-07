@@ -536,6 +536,37 @@
                     "line-opacity": 1.0
                 }
             });
+
+            // Interactive inspection on evacuation corridors
+            map.on("click", "evac-routes-line", (e) => {
+                const f = e.features && e.features[0];
+                if (!f) return;
+                const props = f.properties || {};
+                const fromZone = props.fromZone ? `Threat Zone: <b>${props.fromZone}</b><br>` : "";
+                const toShelter = props.toShelter ? `Safe Destination: <b>${props.toShelter}</b><br>` : "";
+                const dist = props.distanceKm ? `Corridor Distance: <b>${props.distanceKm} km</b><br>` : "";
+                new maplibregl.Popup({ offset: [0, -10], closeButton: true })
+                    .setLngLat(e.lngLat)
+                    .setHTML(`
+                        <div style="font-family: 'DM Mono', monospace; font-size: 11px; padding: 6px 8px; color: #0284c7; min-width: 190px;">
+                            <div style="font-weight: 700; font-size: 12px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                                <span>🛡️</span> <span>EVACUATION CORRIDOR</span>
+                            </div>
+                            <div style="color: #475569; line-height: 1.5; font-size: 10px;">
+                                ${fromZone}${toShelter}${dist}
+                                Status: <span style="color: #10b981; font-weight: 700;">ACTIVE ESCAPE ROUTE</span>
+                            </div>
+                        </div>
+                    `)
+                    .addTo(map);
+            });
+
+            map.on("mouseenter", "evac-routes-line", () => {
+                map.getCanvas().style.cursor = "pointer";
+            });
+            map.on("mouseleave", "evac-routes-line", () => {
+                map.getCanvas().style.cursor = "";
+            });
         }
 
         // Reapply current active simulation data or initial preview
@@ -1469,7 +1500,13 @@
         if (map.getSource("evac-routes-source")) {
             const evacFeatures = (isSimActive && state.evacuationRoutes) ? state.evacuationRoutes.map(r => ({
                 type: "Feature",
-                properties: { name: r.name, status: "clear" },
+                properties: {
+                    name: r.name,
+                    fromZone: r.fromZone || "",
+                    toShelter: r.toShelter || "",
+                    distanceKm: r.distanceKm || "",
+                    status: "clear"
+                },
                 geometry: {
                     type: "LineString",
                     coordinates: r.coordinates

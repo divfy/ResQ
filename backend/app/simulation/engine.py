@@ -97,7 +97,14 @@ class SimulationInstance:
         # 2. Update Evacuation Routes based on blocked roads
         self.evac_engine.update_network_from_road_status(roads)
         if self.elapsed_seconds > 0 or self.status == "RUNNING":
-            evac_routes = self.evac_engine.compute_evacuation_routes(shelters)
+            evac_routes = self.evac_engine.compute_evacuation_routes(
+                shelters,
+                origin_lat=self.origin_lat,
+                origin_lng=self.origin_lng,
+                hazard_radius_km=hazard_radius_km,
+                hazard_model=self.hazard_model,
+                elapsed_seconds=self.elapsed_seconds
+            )
         else:
             evac_routes = []
         
