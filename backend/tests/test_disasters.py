@@ -111,3 +111,60 @@ def test_tsunami_simulation_model():
     impact_coast = tsunami.evaluate_point_impact(13.0830, 80.2710, origin_lat, origin_lng, elapsed_seconds=60)
     assert impact_coast["in_hazard_zone"] is True
     assert impact_coast["blocked"] is True
+
+def test_earthquake_concentric_zones_and_dynamics():
+    """Verify 4 concentric circular zones, depth determining final size, and PGA determining expansion speed."""
+    quake = EarthquakeDisaster({"pga": 0.85, "depth": 12.0})
+    zones = quake.get_earthquake_zones(13.0827, 80.2707, elapsed_seconds=60)
+    
+    assert len(zones) == 4
+    # 4 distinct colors: Yellow = Very Low, Light Orange = Low, Dark Orange = Mid, Red = High
+    assert zones[0]["severity"] == "VERY_LOW"
+    assert zones[0]["fillColor"] == "#facc15"
+    assert zones[1]["severity"] == "LOW"
+    assert zones[1]["fillColor"] == "#fb923c"
+    assert zones[2]["severity"] == "MID"
+    assert zones[2]["fillColor"] == "#ea580c"
+    assert zones[3]["severity"] == "HIGH"
+    assert zones[3]["fillColor"] == "#ef4444"
+
+    # Concentric radius ordering (outer to inner)
+    assert zones[0]["radiusKm"] > zones[1]["radiusKm"] > zones[2]["radiusKm"] > zones[3]["radiusKm"]
+
+    # Test 1: Final size depends exclusively on Epicenter Depth
+    shallow_quake = EarthquakeDisaster({"depth": 5.0, "pga": 0.40})
+    deep_quake = EarthquakeDisaster({"depth": 70.0, "pga": 0.40})
+    # After long duration (e.g. 150s), both have attained maximum size
+    max_shallow_r = shallow_quake.calculate_hazard_radius_km(150)
+    max_deep_r = deep_quake.calculate_hazard_radius_km(150)
+    assert max_shallow_r == 10.5  # 3.5 + 35/5 = 10.5 km
+    assert max_deep_r == 4.0      # 3.5 + 35/70 = 4.0 km
+    assert max_shallow_r > max_deep_r
+
+    # Test 2: Speed to attain maximum size depends exclusively on Peak Ground Acceleration (PGA)
+    high_pga = EarthquakeDisaster({"depth": 10.0, "pga": 1.25})  # 1.25g reaches max in ~20s
+    low_pga = EarthquakeDisaster({"depth": 10.0, "pga": 0.05})   # 0.05g reaches max in ~85s
+    r_high_20s = high_pga.calculate_hazard_radius_km(20)
+    r_low_20s = low_pga.calculate_hazard_radius_km(20)
+    assert r_high_20s > r_low_20s * 1.5
+
+def test_earthquake_population_cap():
+    """Verify affected population count does not exceed area or realistic attenuated capacity."""
+    from backend.app.simulation.engine import SimulationInstance
+    engine = SimulationInstance(
+        simulation_id="sim-test-eq",
+        scenario_id="sc-eq-pop-test",
+        city="chennai",
+        disaster="earthquake",
+        origin_lat=13.0827,
+        origin_lng=80.2707,
+        properties={"depth": 8.0, "pga": 1.10}
+    )
+    engine._recalculate_full_state()
+    metrics = engine.current_state["metrics"]
+    # Population must be realistic and capped (never exceed city population or zone enclosed population)
+    assert 0 < metrics["affectedPopulation"] < 1_500_000
+    assert metrics["casualties"] < metrics["affectedPopulation"]
+    assert engine.current_state["earthquakeZones"] is not None
+    assert len(engine.current_state["earthquakeZones"]) == 4
+

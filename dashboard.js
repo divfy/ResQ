@@ -368,6 +368,7 @@
         const light = isLightMode();
         const isTsunami = (simulationConfig.disaster || "").toLowerCase() === "tsunami";
         const isCyclone = (simulationConfig.disaster || "").toLowerCase() === "cyclone";
+        const isEarthquake = (simulationConfig.disaster || "").toLowerCase() === "earthquake";
 
         // Disaster-specific color palettes:
         // - Tsunami: ocean surge translucent water blue with vivid cyan/white wavecrest border
@@ -395,20 +396,23 @@
         const legendHazardInd = document.getElementById("legendHazardIndicator");
         const legendHazardTxt = document.getElementById("legendHazardText");
         if (legendHazardInd) {
-            legendHazardInd.classList.remove("yellow-box", "blue-box", "purple-box");
+            legendHazardInd.classList.remove("yellow-box", "blue-box", "purple-box", "quake-box");
             if (isTsunami) {
                 legendHazardInd.classList.add("blue-box");
                 if (legendHazardTxt) legendHazardTxt.textContent = "TSUNAMI SURGE";
             } else if (isCyclone) {
                 legendHazardInd.classList.add("purple-box");
                 if (legendHazardTxt) legendHazardTxt.textContent = "CYCLONE SWATH";
+            } else if (isEarthquake) {
+                legendHazardInd.classList.add("quake-box");
+                if (legendHazardTxt) legendHazardTxt.textContent = "SEISMIC ZONES";
             } else {
                 legendHazardInd.classList.add("yellow-box");
                 if (legendHazardTxt) legendHazardTxt.textContent = "HAZARD ZONE";
             }
         }
 
-        // 1. Hazard Polygon Overlay
+        // 1. Hazard Polygon Overlay (Data-driven for multi-colored concentric earthquake zones)
         if (!map.getSource("hazard-source")) {
             map.addSource("hazard-source", {
                 type: "geojson",
@@ -420,8 +424,8 @@
                 source: "hazard-source",
                 type: "fill",
                 paint: {
-                    "fill-color": hazardFillColor,
-                    "fill-opacity": hazardFillOpacity
+                    "fill-color": ["coalesce", ["get", "fillColor"], hazardFillColor],
+                    "fill-opacity": ["coalesce", ["get", "fillOpacity"], hazardFillOpacity]
                 }
             });
 
@@ -430,19 +434,19 @@
                 source: "hazard-source",
                 type: "line",
                 paint: {
-                    "line-color": hazardLineColor,
-                    "line-width": hazardLineWidth,
+                    "line-color": ["coalesce", ["get", "strokeColor"], hazardLineColor],
+                    "line-width": ["coalesce", ["get", "lineWidth"], hazardLineWidth],
                     "line-dasharray": hazardDashArray
                 }
             });
         } else {
             if (map.getLayer("hazard-fill")) {
-                map.setPaintProperty("hazard-fill", "fill-color", hazardFillColor);
-                map.setPaintProperty("hazard-fill", "fill-opacity", hazardFillOpacity);
+                map.setPaintProperty("hazard-fill", "fill-color", ["coalesce", ["get", "fillColor"], hazardFillColor]);
+                map.setPaintProperty("hazard-fill", "fill-opacity", ["coalesce", ["get", "fillOpacity"], hazardFillOpacity]);
             }
             if (map.getLayer("hazard-line")) {
-                map.setPaintProperty("hazard-line", "line-color", hazardLineColor);
-                map.setPaintProperty("hazard-line", "line-width", hazardLineWidth);
+                map.setPaintProperty("hazard-line", "line-color", ["coalesce", ["get", "strokeColor"], hazardLineColor]);
+                map.setPaintProperty("hazard-line", "line-width", ["coalesce", ["get", "lineWidth"], hazardLineWidth]);
                 map.setPaintProperty("hazard-line", "line-dasharray", hazardDashArray);
             }
         }
@@ -587,6 +591,72 @@
         return coords;
     }
 
+    function createEarthquakeConcentricFeatures(centerLng, centerLat, radiusKm = 4.2) {
+        // 4 concentric zones matching user requirement & backend model:
+        // Zone I: Outer / Very Low - Yellow (#facc15), 100% radius
+        // Zone II: Moderate / Low - Light Orange (#fb923c), 70% radius
+        // Zone III: Strong / Mid - Dark Orange (#ea580c), 45% radius
+        // Zone IV: Epicenter Core / High - Red (#ef4444), 20% radius
+        const zoneConfigs = [
+            {
+                name: "Zone I: Very Low (Perceptible Tremor)",
+                severity: "VERY_LOW",
+                factor: 1.0,
+                fillColor: "#facc15",
+                strokeColor: "#eab308",
+                fillOpacity: 0.22,
+                lineWidth: 1.8
+            },
+            {
+                name: "Zone II: Low (Moderate Shaking)",
+                severity: "LOW",
+                factor: 0.70,
+                fillColor: "#fb923c",
+                strokeColor: "#f97316",
+                fillOpacity: 0.28,
+                lineWidth: 2.0
+            },
+            {
+                name: "Zone III: Mid (Strong Shaking)",
+                severity: "MID",
+                factor: 0.45,
+                fillColor: "#ea580c",
+                strokeColor: "#c2410c",
+                fillOpacity: 0.35,
+                lineWidth: 2.2
+            },
+            {
+                name: "Zone IV: High (Severe Epicenter Shaking)",
+                severity: "HIGH",
+                factor: 0.20,
+                fillColor: "#ef4444",
+                strokeColor: "#b91c1c",
+                fillOpacity: 0.45,
+                lineWidth: 2.6
+            }
+        ];
+
+        return zoneConfigs.map(cfg => {
+            const r = Math.max(0.2, radiusKm * cfg.factor);
+            const coords = createHazardCirclePolygon(centerLng, centerLat, r, 36);
+            return {
+                type: "Feature",
+                properties: {
+                    name: cfg.name,
+                    severity: cfg.severity,
+                    fillColor: cfg.fillColor,
+                    strokeColor: cfg.strokeColor,
+                    fillOpacity: cfg.fillOpacity,
+                    lineWidth: cfg.lineWidth
+                },
+                geometry: {
+                    type: "Polygon",
+                    coordinates: [coords]
+                }
+            };
+        });
+    }
+
     function calculateDynamicCycloneTrack(originLat, originLng, cityLat = 13.0827, cityLng = 80.2707, elapsedSeconds = 0.0, speedDeg = 0.0028) {
         const totalSteps = Math.max(0, Math.floor(elapsedSeconds));
         const track = [];
@@ -714,6 +784,7 @@
         if (!map || !map.getSource("hazard-source")) return;
         const isTsunami = (simulationConfig.disaster || "").toLowerCase() === "tsunami";
         const isCyclone = (simulationConfig.disaster || "").toLowerCase() === "cyclone";
+        const isEarthquake = (simulationConfig.disaster || "").toLowerCase() === "earthquake";
 
         // Cyclone: Before starting the simulation, the cyclone does not exist on the map.
         // Show zero swath boundaries and zero swirl markers. Only origin pin is shown.
@@ -730,6 +801,20 @@
                 const ns = Math.max(0, Math.min(1, (surge - 0.5) / 7.5));
                 const radius = 1.0 + nw * 2.0 + ns * 1.0;
                 mapRadiusReadout.textContent = `${radius.toFixed(1)} km Gale Swath`;
+            }
+            return;
+        }
+
+        if (isEarthquake) {
+            const depth = Number(currentProperties.depth) || 12.0;
+            const maxRadius = 3.5 + (35.0 / Math.max(5.0, depth));
+            const eqFeatures = createEarthquakeConcentricFeatures(currentOrigin.longitude, currentOrigin.latitude, maxRadius);
+            map.getSource("hazard-source").setData({
+                type: "FeatureCollection",
+                features: eqFeatures
+            });
+            if (mapRadiusReadout) {
+                mapRadiusReadout.textContent = `${maxRadius.toFixed(1)} km (4 Seismic Zones)`;
             }
             return;
         }
@@ -1086,6 +1171,17 @@
                     }
                 }
 
+                // If disaster is earthquake, dynamically update preview zones when depth/PGA change
+                if ((simulationConfig.disaster || "").toLowerCase() === "earthquake") {
+                    if (!simulationId || isPaused || !isSimulationStarted) {
+                        updatePreviewHazardPolygon();
+                    } else if (mapRadiusReadout) {
+                        const depth = Number(currentProperties.depth) || 12.0;
+                        const maxRadius = 3.5 + (35.0 / Math.max(5.0, depth));
+                        mapRadiusReadout.textContent = `${maxRadius.toFixed(1)} km (4 Seismic Zones)`;
+                    }
+                }
+
                 // Sync to backend simulation
                 if (simulationId) {
                     try {
@@ -1161,6 +1257,12 @@
                 mapRadiusReadout.textContent = `${radius.toFixed(1)} km Gale Swath`;
             }
         }
+
+        if (disaster === "earthquake") {
+            if (!simulationId || isPaused || !isSimulationStarted) {
+                updatePreviewHazardPolygon();
+            }
+        }
     }
 
     /* ============================================================
@@ -1216,6 +1318,8 @@
                 mapRadiusReadout.textContent = "Ocean Surge";
             } else if ((simulationConfig.disaster || "").toLowerCase() === "cyclone") {
                 mapRadiusReadout.textContent = state.hazardRadiusKm ? `${state.hazardRadiusKm.toFixed(1)} km Swath` : "C-Track Swath";
+            } else if ((simulationConfig.disaster || "").toLowerCase() === "earthquake") {
+                mapRadiusReadout.textContent = state.hazardRadiusKm ? `${state.hazardRadiusKm.toFixed(1)} km (4 Zones)` : "4 Seismic Zones";
             } else if (state.hazardRadiusKm) {
                 mapRadiusReadout.textContent = `${state.hazardRadiusKm.toFixed(1)} km`;
             }
@@ -1244,6 +1348,7 @@
         // Active simulation check: evacuation routes, blocked roads, and cyclone swirl/swath ONLY appear after the sim starts!
         const isSimActive = isSimulationStarted || (state && state.status === "RUNNING") || (elapsedSec > 0);
         const isCyclone = (simulationConfig.disaster || "").toLowerCase() === "cyclone";
+        const isEarthquake = (simulationConfig.disaster || "").toLowerCase() === "earthquake";
 
         // Cyclone Swirl & Eye Marker: ONLY exists if simulation is active AND elapsedSec > 0
         if (isCyclone) {
@@ -1256,12 +1361,42 @@
             removeCycloneSwirlMarker();
         }
 
-        // A. Hazard Polygon Envelope: Only if sim is active or non-cyclone initial state
+        // A. Hazard Polygon Envelope: Concentric circles for Earthquake, swept swath for Cyclone, or standard polygon
         if (map.getSource("hazard-source")) {
             if (isCyclone && (!isSimActive || elapsedSec === 0)) {
                 map.getSource("hazard-source").setData({
                     type: "FeatureCollection",
                     features: []
+                });
+            } else if (isEarthquake) {
+                let eqFeatures = [];
+                if (Array.isArray(state.earthquakeZones) && state.earthquakeZones.length > 0) {
+                    eqFeatures = state.earthquakeZones.map(z => ({
+                        type: "Feature",
+                        properties: {
+                            name: z.name,
+                            severity: z.severity,
+                            fillColor: z.fillColor,
+                            strokeColor: z.strokeColor,
+                            fillOpacity: z.fillOpacity,
+                            lineWidth: z.lineWidth
+                        },
+                        geometry: {
+                            type: "Polygon",
+                            coordinates: [z.coordinates]
+                        }
+                    }));
+                } else if (state.earthquakeZones && Array.isArray(state.earthquakeZones.features)) {
+                    eqFeatures = state.earthquakeZones.features;
+                } else {
+                    const r = Number(state.hazardRadiusKm) || 4.2;
+                    const cLng = (state.origin && state.origin.longitude) || currentOrigin.longitude;
+                    const cLat = (state.origin && state.origin.latitude) || currentOrigin.latitude;
+                    eqFeatures = createEarthquakeConcentricFeatures(cLng, cLat, r);
+                }
+                map.getSource("hazard-source").setData({
+                    type: "FeatureCollection",
+                    features: eqFeatures
                 });
             } else if (state.hazardPolygon && Array.isArray(state.hazardPolygon) && state.hazardPolygon.length > 0) {
                 map.getSource("hazard-source").setData({

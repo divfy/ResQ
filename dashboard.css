@@ -745,6 +745,12 @@ html.light-mode .layer-pill , body.light-mode .layer-pill {
     box-shadow: 0 0 6px rgba(192, 132, 252, 0.6);
 }
 
+.legend-indicator.quake-box {
+    background: linear-gradient(90deg, #ef4444 25%, #ea580c 50%, #fb923c 75%, #facc15 100%);
+    border: 1px solid #ef4444;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+}
+
 .legend-indicator.blue-dot {
     background: var(--color-flood-light);
     border-radius: 50%;

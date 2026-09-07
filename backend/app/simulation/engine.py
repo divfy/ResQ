@@ -187,6 +187,53 @@ class SimulationInstance:
 
                 time_growth = 1.0 + min(0.35, max(0, self.elapsed_seconds) / 360.0)
                 affected_pop = int(total_affected * time_growth)
+        elif self.disaster == "earthquake" and zones:
+            total_affected = 0.0
+            max_enclosed_pop = 0.0
+            for z in zones:
+                z_lng, z_lat = z["center"]
+                z_pop = z.get("population", 0)
+                z_area = z.get("areaKm2", 25.0)
+                z_vuln = z.get("vulnerability", 0.7)
+
+                z_radius_km = math.sqrt(max(1.0, z_area) / math.pi)
+                dist_to_center = haversine_distance_km(self.origin_lat, self.origin_lng, z_lat, z_lng)
+
+                if dist_to_center >= (hazard_radius_km + z_radius_km):
+                    overlap_ratio = 0.0
+                elif dist_to_center + z_radius_km <= hazard_radius_km:
+                    overlap_ratio = 1.0
+                else:
+                    overlap_ratio = max(0.0, min(1.0, (hazard_radius_km + z_radius_km - dist_to_center) / (2.0 * z_radius_km)))
+
+                if overlap_ratio > 0:
+                    enclosed_in_zone = z_pop * overlap_ratio
+                    max_enclosed_pop += enclosed_in_zone
+
+                    # Attenuation across 4 seismic intensity zones:
+                    # Zone IV: High (Red, <= 20% radius): severe structural collapse ~40% impacted
+                    # Zone III: Mid (Dark Orange, 20-45% radius): strong ground motion ~18% impacted
+                    # Zone II: Low (Light Orange, 45-70% radius): moderate shaking ~6% impacted
+                    # Zone I: Very Low (Yellow, 70-100% radius): perceptible tremor ~1.5% impacted
+                    rel_dist = dist_to_center / max(0.1, hazard_radius_km)
+                    if rel_dist <= 0.20:
+                        impact_rate = 0.40
+                    elif rel_dist <= 0.45:
+                        impact_rate = 0.18
+                    elif rel_dist <= 0.70:
+                        impact_rate = 0.06
+                    else:
+                        impact_rate = 0.015
+
+                    sev_factor = min(1.2, (severity / 3.0) ** 0.8)
+                    total_affected += enclosed_in_zone * impact_rate * sev_factor * z_vuln
+
+            time_growth = 1.0 + min(0.20, max(0, self.elapsed_seconds) / 360.0)
+            city_pop = self.infrastructure.get("population", 5000000)
+            affected_pop = min(int(max_enclosed_pop * 0.30), int(total_affected * time_growth))
+            affected_pop = min(int(city_pop * 0.35), affected_pop)
+            if hazard_radius_km > 0.5 and max_enclosed_pop > 0:
+                affected_pop = max(800, affected_pop)
         elif zones:
             total_affected = 0.0
             for z in zones:
@@ -214,11 +261,12 @@ class SimulationInstance:
                     total_affected += zone_impact
 
             time_growth = 1.0 + min(0.35, max(0, self.elapsed_seconds) / 360.0)
-            affected_pop = max(1200 if hazard_radius_km > 0.5 else 0, int(total_affected * time_growth))
+            city_pop = self.infrastructure.get("population", 5000000)
+            affected_pop = min(int(city_pop * 0.50), max(1200 if hazard_radius_km > 0.5 else 0, int(total_affected * time_growth)))
         else:
             city_pop = self.infrastructure.get("population", 5000000)
             hazard_ratio = min(0.35, (hazard_radius_km / 12.0) ** 1.5 * (severity / 3.0))
-            affected_pop = max(1200, int(city_pop * hazard_ratio * (1.0 + self.elapsed_seconds / 300.0)))
+            affected_pop = min(city_pop, max(1200, int(city_pop * hazard_ratio * (1.0 + self.elapsed_seconds / 300.0))))
         
         blocked_count = sum(1 for r in roads if r["blocked"])
         hosp_avail = sum(1 for h in hospitals if h["operationalStatus"] in ("OPERATIONAL", "STRESSED", "NEAR_CAPACITY") and h.get("availableBeds", 0) > 0)
@@ -289,6 +337,15 @@ class SimulationInstance:
                     cyclone_track,
                     radius_km=hazard_radius_km
                 )
+        elif self.disaster == "earthquake":
+            hazard_polygon = create_hazard_circle_polygon(
+                self.origin_lng,
+                self.origin_lat,
+                hazard_radius_km
+            )
+            earthquake_zones = getattr(self.hazard_model, "get_earthquake_zones", lambda *a: [])(
+                self.origin_lat, self.origin_lng, self.elapsed_seconds
+            )
         else:
             hazard_polygon = create_hazard_circle_polygon(
                 self.origin_lng,
@@ -333,6 +390,7 @@ class SimulationInstance:
             "power": power,
             "evacuationRoutes": evac_routes,
             "hazardPolygon": hazard_polygon,
+            "earthquakeZones": earthquake_zones if self.disaster == "earthquake" else None,
             "cycloneEye": cyclone_eye,
             "cycloneTrack": cyclone_track,
             "cycloneCategory": cyclone_category if self.disaster == "cyclone" else None,
@@ -381,6 +439,7 @@ class SimulationInstance:
             "hazardRadiusKm": self.current_state["hazardRadiusKm"],
             "metrics": self.current_state["metrics"],
             "hazardPolygon": self.current_state["hazardPolygon"],
+            "earthquakeZones": self.current_state.get("earthquakeZones"),
             "cycloneEye": self.current_state.get("cycloneEye"),
             "cycloneTrack": self.current_state.get("cycloneTrack"),
             "cycloneCategory": self.current_state.get("cycloneCategory"),
