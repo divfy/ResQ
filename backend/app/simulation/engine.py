@@ -93,11 +93,16 @@ class SimulationInstance:
         affected_pop = max(1200, int(city_pop * hazard_ratio * (1.0 + self.elapsed_seconds / 300.0)))
         
         blocked_count = sum(1 for r in roads if r["blocked"])
-        hosp_avail = sum(1 for h in hospitals if h["operationalStatus"] == "OPERATIONAL")
-        hosp_full = sum(1 for h in hospitals if h["operationalStatus"] in ("FULL", "COMPROMISED"))
+        hosp_avail = sum(1 for h in hospitals if h["operationalStatus"] in ("OPERATIONAL", "STRESSED", "NEAR_CAPACITY") and h.get("availableBeds", 0) > 0)
+        hosp_full = sum(1 for h in hospitals if h["operationalStatus"] in ("FULL", "COMPROMISED", "DAMAGED") or h.get("availableBeds", 0) == 0)
         shl_active = sum(1 for s in shelters if s["status"] == "OPERATIONAL")
         outages_count = sum(1 for p in power if p["status"] == "OFFLINE")
-        
+
+        total_beds = sum(int(h.get("beds", 0)) for h in hospitals)
+        avail_beds = sum(int(h.get("availableBeds", 0)) for h in hospitals)
+        used_beds = max(0, total_beds - avail_beds)
+        hosp_capacity_pct = round((used_beds / max(1, total_beds)) * 100, 1) if total_beds > 0 else 0.0
+
         metrics = {
             "affectedPopulation": affected_pop,
             "availableHospitals": hosp_avail,
@@ -106,7 +111,10 @@ class SimulationInstance:
             "blockedRoads": blocked_count,
             "activeShelters": shl_active,
             "totalShelters": len(shelters),
-            "powerOutages": outages_count
+            "powerOutages": outages_count,
+            "hospitalCapacityPct": hosp_capacity_pct,
+            "totalBeds": total_beds,
+            "availableBeds": avail_beds
         }
         
         # 4. Generate Hazard Polygon

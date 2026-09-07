@@ -30,7 +30,7 @@
         })();
     </script>
 
-    <link rel="stylesheet" href="dashboard.css?v=2" />
+    <link rel="stylesheet" href="dashboard.css?v=5" />
 </head>
 <body>
     <!-- Background Texture -->
@@ -168,10 +168,10 @@
                 </div>
             </section>
 
-            <!-- Vertical Resizer Splitter -->
-            <div class="resizer resizer-v" id="resizerV" title="Drag horizontally to resize panels"></div>
+            <!-- Vertical Resizer Splitter 1 (Map <-> Overview) -->
+            <div class="resizer resizer-v" id="resizerV1" title="Drag horizontally to resize panels"></div>
 
-            <!-- 2. OVERVIEW PANEL (Right) -->
+            <!-- 2. SITUATION OVERVIEW PANEL (Middle) -->
             <section class="dashboard-panel overview-panel" id="overviewPanel">
                 <div class="corner tl"></div>
                 <div class="corner tr"></div>
@@ -180,10 +180,10 @@
 
                 <div class="panel-header">
                     <div>
-                        <div class="panel-title">SITUATION OVERVIEW & AI BRIEFING</div>
-                        <div class="panel-subtitle">Real-Time Metric Aggregation & Action Directives</div>
+                        <div class="panel-title">SITUATION OVERVIEW</div>
+                        <div class="panel-subtitle">Real-Time Metric Aggregation & Asset Health</div>
                     </div>
-                    <div class="panel-index">02 / 03</div>
+                    <div class="panel-index">02 / 04</div>
                 </div>
 
                 <!-- Real-Time Metrics Counters Grid -->
@@ -249,13 +249,32 @@
                         <div class="metric-footer">DISTRICT TRANSFORMERS DE-ENERGIZED</div>
                     </div>
                 </div>
+            </section>
+
+            <!-- Vertical Resizer Splitter 2 (Overview <-> AI Synthesis) -->
+            <div class="resizer resizer-v" id="resizerV2" title="Drag horizontally to resize panels"></div>
+
+            <!-- 3. AI SITUATION SYNTHESIS PANEL (Right) -->
+            <section class="dashboard-panel ai-panel" id="aiPanel">
+                <div class="corner tl"></div>
+                <div class="corner tr"></div>
+                <div class="corner bl"></div>
+                <div class="corner br"></div>
+
+                <div class="panel-header">
+                    <div>
+                        <div class="panel-title">AI SITUATION SYNTHESIS</div>
+                        <div class="panel-subtitle">Neural Threat Advisory & Action Directives</div>
+                    </div>
+                    <div class="panel-index">03 / 04</div>
+                </div>
 
                 <!-- AI Response Readout Card -->
                 <div class="ai-response-card" id="aiResponseBlock">
                     <div class="ai-header">
                         <div class="ai-title-group">
                             <span class="ai-sparkle">✦</span>
-                            <span class="ai-title">AI SITUATION SYNTHESIS</span>
+                            <span class="ai-title">LIVE CRISIS DIRECTIVE</span>
                         </div>
                         <div class="ai-status-chip">
                             <span class="ai-chip-dot"></span>
@@ -349,10 +368,10 @@
     </main>
 
     <!-- Core Scripts (Config -> API Client -> Data Rules -> Engine -> Dashboard Orchestration) -->
-    <script src="config.js?v=4"></script>
-    <script src="services/api.js?v=4"></script>
-    <script src="data/disaster-rules.js?v=4"></script>
-    <script src="simulation-engine.js?v=4"></script>
-    <script src="dashboard.js?v=4"></script>
+    <script src="config.js?v=5"></script>
+    <script src="services/api.js?v=5"></script>
+    <script src="data/disaster-rules.js?v=5"></script>
+    <script src="simulation-engine.js?v=5"></script>
+    <script src="dashboard.js?v=5"></script>
 </body>
 </html>

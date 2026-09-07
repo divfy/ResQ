@@ -124,6 +124,9 @@ class OverviewMetrics(BaseModel):
     activeShelters: int
     totalShelters: int
     powerOutages: int
+    hospitalCapacityPct: Optional[float] = 0.0
+    totalBeds: Optional[int] = 0
+    availableBeds: Optional[int] = 0
 
 
 class SimulationStateResponse(BaseModel):

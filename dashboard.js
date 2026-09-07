@@ -103,8 +103,10 @@
     const workspaceTop = document.getElementById("workspaceTop");
     const mapPanel = document.getElementById("mapPanel");
     const overviewPanel = document.getElementById("overviewPanel");
+    const aiPanel = document.getElementById("aiPanel");
     const propertiesPanel = document.getElementById("propertiesPanel");
-    const resizerV = document.getElementById("resizerV");
+    const resizerV1 = document.getElementById("resizerV1") || document.getElementById("resizerV");
+    const resizerV2 = document.getElementById("resizerV2");
     const resizerH = document.getElementById("resizerH");
 
     // Mobile Tabs
@@ -804,12 +806,13 @@
             animateValue(counterShelters, state.metrics.activeShelters);
             animateValue(counterOutages, state.metrics.powerOutages);
 
-            if (counterHospAvail) counterHospAvail.textContent = state.metrics.availableHospitals;
-            if (counterHospFull) counterHospFull.textContent = state.metrics.fullHospitals;
+            if (counterHospAvail) animateValue(counterHospAvail, state.metrics.availableHospitals);
+            if (counterHospFull) animateValue(counterHospFull, state.metrics.fullHospitals);
             if (hospCapacityFill) {
-                const total = state.metrics.totalHospitals || 1;
-                const pct = Math.round((state.metrics.fullHospitals / total) * 100);
-                hospCapacityFill.style.width = `${pct}%`;
+                const pct = state.metrics.hospitalCapacityPct !== undefined
+                    ? state.metrics.hospitalCapacityPct
+                    : Math.round((state.metrics.fullHospitals / Math.max(1, state.metrics.totalHospitals || 1)) * 100);
+                hospCapacityFill.style.width = `${Math.min(100, Math.max(2, pct))}%`;
             }
         }
 
@@ -1057,15 +1060,24 @@
        10. DESKTOP DRAGGABLE PANEL SPLITTERS (RESIZERS)
     ============================================================ */
 
-    let isDraggingV = false;
-    resizerV?.addEventListener("mousedown", () => {
-        isDraggingV = true;
-        resizerV.classList.add("dragging");
+    let isDraggingV1 = false;
+    let isDraggingV2 = false;
+    let isDraggingH = false;
+
+    resizerV1?.addEventListener("mousedown", () => {
+        isDraggingV1 = true;
+        resizerV1.classList.add("dragging");
         document.body.style.cursor = "col-resize";
         document.body.style.userSelect = "none";
     });
 
-    let isDraggingH = false;
+    resizerV2?.addEventListener("mousedown", () => {
+        isDraggingV2 = true;
+        resizerV2.classList.add("dragging");
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+    });
+
     resizerH?.addEventListener("mousedown", () => {
         isDraggingH = true;
         resizerH.classList.add("dragging");
@@ -1074,13 +1086,19 @@
     });
 
     document.addEventListener("mousemove", (e) => {
-        if (isDraggingV) {
+        if (isDraggingV1) {
             const containerRect = workspaceTop.getBoundingClientRect();
             const offset = e.clientX - containerRect.left;
             const pct = (offset / containerRect.width) * 100;
-            const clampedPct = Math.max(25, Math.min(75, pct));
+            const clampedPct = Math.max(30, Math.min(65, pct));
             mapPanel.style.flex = `0 0 ${clampedPct}%`;
-            overviewPanel.style.flex = `0 0 ${100 - clampedPct}%`;
+            if (map) map.resize();
+        } else if (isDraggingV2) {
+            const containerRect = workspaceTop.getBoundingClientRect();
+            const offset = containerRect.right - e.clientX;
+            const pct = (offset / containerRect.width) * 100;
+            const clampedPct = Math.max(15, Math.min(45, pct));
+            if (aiPanel) aiPanel.style.flex = `0 0 ${clampedPct}%`;
             if (map) map.resize();
         } else if (isDraggingH) {
             const totalHeight = window.innerHeight - 54;
@@ -1092,20 +1110,21 @@
     });
 
     document.addEventListener("mouseup", () => {
-        if (isDraggingV) {
-            isDraggingV = false;
-            resizerV.classList.remove("dragging");
-            document.body.style.cursor = "";
-            document.body.style.userSelect = "";
-            if (map) map.resize();
+        if (isDraggingV1) {
+            isDraggingV1 = false;
+            resizerV1?.classList.remove("dragging");
+        }
+        if (isDraggingV2) {
+            isDraggingV2 = false;
+            resizerV2?.classList.remove("dragging");
         }
         if (isDraggingH) {
             isDraggingH = false;
-            resizerH.classList.remove("dragging");
-            document.body.style.cursor = "";
-            document.body.style.userSelect = "";
-            if (map) map.resize();
+            resizerH?.classList.remove("dragging");
         }
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        if (map) map.resize();
     });
 
     /* ============================================================

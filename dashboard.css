@@ -592,7 +592,7 @@ html.light-mode .panel-header , body.light-mode .panel-header {
 ============================================================ */
 
 .map-panel {
-    flex: 1 1 58%;
+    flex: 2 1 50%;
     min-width: 320px;
     position: relative;
 }
@@ -738,11 +738,28 @@ html.light-mode .map-telemetry-bar , body.light-mode .map-telemetry-bar {
     font-size: 13px;
     cursor: pointer;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-    transition: transform 0.2s ease;
+    /* No transition on marker container - prevents swinging/lagging when moving map */
+    will-change: transform;
 }
 
-.map-marker:hover {
-    transform: scale(1.2);
+.map-marker span {
+    display: inline-block;
+    transition: transform 0.15s ease;
+    pointer-events: none;
+    line-height: 1;
+}
+
+.map-marker:hover span {
+    transform: scale(1.25);
+}
+
+.marker-origin {
+    font-size: 24px;
+    cursor: pointer;
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.6));
+    line-height: 1;
+    display: grid;
+    place-items: center;
 }
 
 .marker-shelter {
@@ -774,14 +791,36 @@ html.light-mode .marker-shelter , body.light-mode .marker-shelter {
 }
 
 /* ============================================================
-   7. RIGHT PANEL: OVERVIEW & AI BRIEFING
-============================================================ */
+   7. MIDDLE PANEL: SITUATION OVERVIEW (1 Ratio)
+   ============================================================ */
 
 .overview-panel {
-    flex: 1 1 42%;
-    min-width: 320px;
+    flex: 1 1 25%;
+    min-width: 250px;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
+}
+
+/* ============================================================
+   8. RIGHT PANEL: AI CRISIS SYNTHESIS (1 Ratio)
+   ============================================================ */
+
+.ai-panel {
+    flex: 1 1 25%;
+    min-width: 250px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-panel);
+    position: relative;
+    overflow-y: auto;
+}
+
+html.light-mode .ai-panel,
+body.light-mode .ai-panel {
+    background: var(--bg-panel);
+    border-color: var(--border-panel);
 }
 
 .metrics-grid {
@@ -789,7 +828,7 @@ html.light-mode .marker-shelter , body.light-mode .marker-shelter {
     grid-template-columns: repeat(2, 1fr);
     gap: 8px;
     padding: 12px;
-    flex-shrink: 0;
+    flex: 1;
 }
 
 .metric-card {
@@ -923,13 +962,13 @@ html.light-mode .metric-card , body.light-mode .metric-card {
 .capacity-fill {
     height: 100%;
     background: linear-gradient(90deg, var(--color-ok), var(--color-critical));
-    transition: width 0.4s ease;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* AI Response Readout Card */
 .ai-response-card {
     flex: 1;
-    margin: 0 12px 12px;
+    margin: 12px;
     padding: 14px;
     background: rgba(0, 0, 0, 0.25);
     border: 1px solid rgba(255, 255, 255, 0.10);

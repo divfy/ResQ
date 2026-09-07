@@ -243,11 +243,25 @@ class RoadNetwork:
                 if segment_a["road_id"] == segment_b["road_id"]:
                     continue
 
+                sa_start, sa_end = segment_a["start"], segment_a["end"]
+                sb_start, sb_end = segment_b["start"], segment_b["end"]
+
+                # Fast bounding-box overlap rejection
+                min_ax, max_ax = (sa_start[0], sa_end[0]) if sa_start[0] < sa_end[0] else (sa_end[0], sa_start[0])
+                min_bx, max_bx = (sb_start[0], sb_end[0]) if sb_start[0] < sb_end[0] else (sb_end[0], sb_start[0])
+                if max_ax < min_bx or min_ax > max_bx:
+                    continue
+
+                min_ay, max_ay = (sa_start[1], sa_end[1]) if sa_start[1] < sa_end[1] else (sa_end[1], sa_start[1])
+                min_by, max_by = (sb_start[1], sb_end[1]) if sb_start[1] < sb_end[1] else (sb_end[1], sb_start[1])
+                if max_ay < min_by or min_ay > max_by:
+                    continue
+
                 intersection = self._segment_intersection(
-                    segment_a["start"],
-                    segment_a["end"],
-                    segment_b["start"],
-                    segment_b["end"],
+                    sa_start,
+                    sa_end,
+                    sb_start,
+                    sb_end,
                 )
 
                 if intersection is not None:
