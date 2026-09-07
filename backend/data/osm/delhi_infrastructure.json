@@ -128,6 +128,66 @@
       "powerStatus": "GRID",
       "operationalStatus": "OPERATIONAL",
       "address": "Okhla Road, Sukhdev Vihar, New Delhi"
+    },
+    {
+      "id": "del-hosp-9",
+      "name": "Guru Teg Bahadur Hospital (GTB Dilshad Garden)",
+      "latitude": 28.6835,
+      "longitude": 77.309,
+      "beds": 1500,
+      "availableBeds": 240,
+      "icuBeds": 120,
+      "availableIcu": 18,
+      "traumaCenter": true,
+      "powerStatus": "GRID",
+      "operationalStatus": "OPERATIONAL",
+      "coastalExposure": 0.0,
+      "address": "Tahirpur Road, Dilshad Garden"
+    },
+    {
+      "id": "del-hosp-10",
+      "name": "Deen Dayal Upadhyay Hospital (DDU Hari Nagar)",
+      "latitude": 28.6275,
+      "longitude": 77.112,
+      "beds": 650,
+      "availableBeds": 95,
+      "icuBeds": 60,
+      "availableIcu": 9,
+      "traumaCenter": true,
+      "powerStatus": "GRID",
+      "operationalStatus": "OPERATIONAL",
+      "coastalExposure": 0.0,
+      "address": "Clock Tower, Hari Nagar"
+    },
+    {
+      "id": "del-hosp-11",
+      "name": "Sanjay Gandhi Memorial Hospital (Mangolpuri)",
+      "latitude": 28.694,
+      "longitude": 77.098,
+      "beds": 600,
+      "availableBeds": 80,
+      "icuBeds": 50,
+      "availableIcu": 7,
+      "traumaCenter": true,
+      "powerStatus": "GRID",
+      "operationalStatus": "OPERATIONAL",
+      "coastalExposure": 0.0,
+      "address": "S-Block, Mangolpuri"
+    },
+    {
+      "id": "del-hosp-12",
+      "name": "Rajiv Gandhi Super Speciality Hospital (Tahirpur)",
+      "latitude": 28.688,
+      "longitude": 77.317,
+      "beds": 650,
+      "availableBeds": 110,
+      "icuBeds": 80,
+      "availableIcu": 14,
+      "traumaCenter": true,
+      "powerStatus": "GRID",
+      "operationalStatus": "OPERATIONAL",
+      "coastalExposure": 0.0,
+      "address": "Tahirpur, East Delhi"
     }
   ],
   "shelters": [
@@ -202,6 +262,54 @@
       "status": "OPERATIONAL",
       "supplies": "ADEQUATE",
       "address": "Model Town, North Delhi"
+    },
+    {
+      "id": "del-shl-7",
+      "name": "Talkatora Indoor Stadium & Civic Complex",
+      "latitude": 28.623,
+      "longitude": 77.193,
+      "capacity": 10000,
+      "occupancy": 120,
+      "remainingCapacity": 9880,
+      "status": "OPERATIONAL",
+      "supplies": "EXCELLENT",
+      "address": "President's Estate, Talkatora Garden"
+    },
+    {
+      "id": "del-shl-8",
+      "name": "DDA Sports Complex Rohini Sector 14",
+      "latitude": 28.718,
+      "longitude": 77.132,
+      "capacity": 9000,
+      "occupancy": 90,
+      "remainingCapacity": 8910,
+      "status": "OPERATIONAL",
+      "supplies": "EXCELLENT",
+      "address": "Sector 14, Rohini"
+    },
+    {
+      "id": "del-shl-9",
+      "name": "DDA Community & Relief Center Dwarka",
+      "latitude": 28.586,
+      "longitude": 77.054,
+      "capacity": 8500,
+      "occupancy": 70,
+      "remainingCapacity": 8430,
+      "status": "OPERATIONAL",
+      "supplies": "EXCELLENT",
+      "address": "Sector 11, Dwarka"
+    },
+    {
+      "id": "del-shl-10",
+      "name": "Yamuna Sports Complex Surajmal Vihar",
+      "latitude": 28.658,
+      "longitude": 77.305,
+      "capacity": 12000,
+      "occupancy": 150,
+      "remainingCapacity": 11850,
+      "status": "OPERATIONAL",
+      "supplies": "EXCELLENT",
+      "address": "Surajmal Vihar, East Delhi"
     }
   ],
   "powerStations": [
@@ -276,6 +384,50 @@
         "del-hosp-5"
       ],
       "floodProne": false
+    },
+    {
+      "id": "del-pwr-6",
+      "name": "Mandoli 400kV Substation (East Delhi)",
+      "latitude": 28.705,
+      "longitude": 77.318,
+      "capacityMW": 500,
+      "status": "OPERATIONAL",
+      "type": "substation",
+      "floodProne": false,
+      "supplies": [
+        "del-hosp-9",
+        "del-hosp-12",
+        "del-zone-5"
+      ]
+    },
+    {
+      "id": "del-pwr-7",
+      "name": "Bamnoli 400kV Grid Substation (Dwarka)",
+      "latitude": 28.552,
+      "longitude": 77.042,
+      "capacityMW": 600,
+      "status": "OPERATIONAL",
+      "type": "substation",
+      "floodProne": false,
+      "supplies": [
+        "del-hosp-10",
+        "del-shl-9",
+        "del-zone-8"
+      ]
+    },
+    {
+      "id": "del-pwr-8",
+      "name": "Tikri Kalan 400kV Substation (West Delhi)",
+      "latitude": 28.685,
+      "longitude": 76.995,
+      "capacityMW": 450,
+      "status": "OPERATIONAL",
+      "type": "substation",
+      "floodProne": false,
+      "supplies": [
+        "del-hosp-11",
+        "del-zone-7"
+      ]
     }
   ],
   "bridges": [
@@ -1845,68 +1997,1209 @@
           28.689976
         ]
       ]
+    },
+    {
+      "id": "del-rd-8",
+      "name": "Outer Ring Road (South) - Nehru Place to Munirka",
+      "speedKmh": 60,
+      "capacity": 5500,
+      "laneCount": 6,
+      "isArterial": true,
+      "isBridge": false,
+      "coordinates": [
+        [
+          77.251314,
+          28.550242
+        ],
+        [
+          77.248602,
+          28.549392
+        ],
+        [
+          77.247292,
+          28.551797
+        ],
+        [
+          77.24273,
+          28.554699
+        ],
+        [
+          77.238913,
+          28.55829
+        ],
+        [
+          77.232743,
+          28.559895
+        ],
+        [
+          77.231225,
+          28.560186
+        ],
+        [
+          77.228699,
+          28.554716
+        ],
+        [
+          77.228252,
+          28.552689
+        ],
+        [
+          77.229161,
+          28.547549
+        ],
+        [
+          77.229753,
+          28.54625
+        ],
+        [
+          77.230437,
+          28.546199
+        ],
+        [
+          77.231423,
+          28.546578
+        ],
+        [
+          77.231485,
+          28.547159
+        ],
+        [
+          77.230849,
+          28.547423
+        ],
+        [
+          77.230674,
+          28.547245
+        ],
+        [
+          77.229792,
+          28.547352
+        ],
+        [
+          77.230232,
+          28.546403
+        ],
+        [
+          77.229778,
+          28.546195
+        ],
+        [
+          77.232064,
+          28.541413
+        ],
+        [
+          77.226563,
+          28.542065
+        ],
+        [
+          77.221395,
+          28.542447
+        ],
+        [
+          77.215292,
+          28.542908
+        ],
+        [
+          77.209816,
+          28.543269
+        ],
+        [
+          77.209855,
+          28.543552
+        ],
+        [
+          77.215991,
+          28.543084
+        ],
+        [
+          77.218024,
+          28.542942
+        ],
+        [
+          77.218071,
+          28.543408
+        ],
+        [
+          77.217149,
+          28.543532
+        ],
+        [
+          77.217049,
+          28.54392
+        ],
+        [
+          77.211454,
+          28.544306
+        ],
+        [
+          77.210542,
+          28.544547
+        ],
+        [
+          77.210871,
+          28.546386
+        ],
+        [
+          77.209428,
+          28.546748
+        ],
+        [
+          77.208824,
+          28.543353
+        ],
+        [
+          77.203636,
+          28.543864
+        ],
+        [
+          77.198561,
+          28.545395
+        ],
+        [
+          77.194723,
+          28.546287
+        ],
+        [
+          77.194888,
+          28.545776
+        ],
+        [
+          77.194459,
+          28.545617
+        ],
+        [
+          77.194888,
+          28.545776
+        ],
+        [
+          77.194709,
+          28.5464
+        ],
+        [
+          77.188519,
+          28.548615
+        ],
+        [
+          77.18387,
+          28.550478
+        ],
+        [
+          77.179505,
+          28.553345
+        ],
+        [
+          77.175216,
+          28.556136
+        ],
+        [
+          77.172302,
+          28.558092
+        ],
+        [
+          77.172096,
+          28.557914
+        ]
+      ]
+    },
+    {
+      "id": "del-rd-9",
+      "name": "Delhi-Gurgaon Expressway (NH 48)",
+      "speedKmh": 75,
+      "capacity": 7000,
+      "laneCount": 8,
+      "isArterial": true,
+      "isBridge": false,
+      "coordinates": [
+        [
+          77.164756,
+          28.592374
+        ],
+        [
+          77.164786,
+          28.592645
+        ],
+        [
+          77.164088,
+          28.593201
+        ],
+        [
+          77.158039,
+          28.590648
+        ],
+        [
+          77.15628,
+          28.589618
+        ],
+        [
+          77.158888,
+          28.585224
+        ],
+        [
+          77.160137,
+          28.582694
+        ],
+        [
+          77.157966,
+          28.578159
+        ],
+        [
+          77.158054,
+          28.576777
+        ],
+        [
+          77.157762,
+          28.575963
+        ],
+        [
+          77.158326,
+          28.575669
+        ],
+        [
+          77.156071,
+          28.575352
+        ],
+        [
+          77.1517,
+          28.574131
+        ],
+        [
+          77.146616,
+          28.575133
+        ],
+        [
+          77.143545,
+          28.575182
+        ],
+        [
+          77.138606,
+          28.57307
+        ],
+        [
+          77.134561,
+          28.569968
+        ],
+        [
+          77.133835,
+          28.560935
+        ],
+        [
+          77.133626,
+          28.559305
+        ],
+        [
+          77.132035,
+          28.554355
+        ],
+        [
+          77.130695,
+          28.551908
+        ],
+        [
+          77.126767,
+          28.548544
+        ],
+        [
+          77.123175,
+          28.545902
+        ],
+        [
+          77.123106,
+          28.544463
+        ],
+        [
+          77.123872,
+          28.544418
+        ],
+        [
+          77.12385,
+          28.54326
+        ],
+        [
+          77.123548,
+          28.541815
+        ],
+        [
+          77.122624,
+          28.541864
+        ],
+        [
+          77.122618,
+          28.542656
+        ],
+        [
+          77.119833,
+          28.54119
+        ],
+        [
+          77.119316,
+          28.541959
+        ],
+        [
+          77.118262,
+          28.542061
+        ],
+        [
+          77.115415,
+          28.537437
+        ],
+        [
+          77.109939,
+          28.534581
+        ],
+        [
+          77.105551,
+          28.532121
+        ],
+        [
+          77.102139,
+          28.527294
+        ],
+        [
+          77.09931,
+          28.52283
+        ],
+        [
+          77.098503,
+          28.521607
+        ],
+        [
+          77.09982,
+          28.520947
+        ],
+        [
+          77.102211,
+          28.51814
+        ],
+        [
+          77.099189,
+          28.513835
+        ],
+        [
+          77.09796,
+          28.512061
+        ]
+      ]
+    },
+    {
+      "id": "del-rd-10",
+      "name": "GT Karnal Road (NH 44 - North Arterial)",
+      "speedKmh": 70,
+      "capacity": 6500,
+      "laneCount": 6,
+      "isArterial": true,
+      "isBridge": false,
+      "coordinates": [
+        [
+          77.178524,
+          28.712001
+        ],
+        [
+          77.17861,
+          28.711709
+        ],
+        [
+          77.180851,
+          28.715765
+        ],
+        [
+          77.180854,
+          28.716542
+        ],
+        [
+          77.181214,
+          28.717239
+        ],
+        [
+          77.177696,
+          28.720946
+        ],
+        [
+          77.17515,
+          28.723487
+        ],
+        [
+          77.172033,
+          28.722405
+        ],
+        [
+          77.168978,
+          28.726443
+        ],
+        [
+          77.166618,
+          28.729598
+        ],
+        [
+          77.16507,
+          28.728701
+        ],
+        [
+          77.164122,
+          28.729972
+        ],
+        [
+          77.16505,
+          28.730514
+        ],
+        [
+          77.164845,
+          28.7308
+        ],
+        [
+          77.165354,
+          28.731281
+        ],
+        [
+          77.162829,
+          28.735215
+        ],
+        [
+          77.163197,
+          28.735406
+        ],
+        [
+          77.163327,
+          28.735779
+        ],
+        [
+          77.163875,
+          28.73589
+        ],
+        [
+          77.163911,
+          28.736229
+        ],
+        [
+          77.166046,
+          28.736092
+        ],
+        [
+          77.167532,
+          28.737887
+        ],
+        [
+          77.167687,
+          28.738751
+        ],
+        [
+          77.163307,
+          28.739316
+        ],
+        [
+          77.158052,
+          28.73793
+        ],
+        [
+          77.156116,
+          28.738035
+        ],
+        [
+          77.154985,
+          28.739962
+        ],
+        [
+          77.153249,
+          28.745165
+        ],
+        [
+          77.151463,
+          28.750667
+        ],
+        [
+          77.150893,
+          28.752388
+        ],
+        [
+          77.151515,
+          28.752513
+        ],
+        [
+          77.151578,
+          28.754361
+        ],
+        [
+          77.150243,
+          28.754369
+        ],
+        [
+          77.150664,
+          28.753117
+        ],
+        [
+          77.149334,
+          28.752771
+        ],
+        [
+          77.14596,
+          28.763147
+        ],
+        [
+          77.143601,
+          28.770694
+        ],
+        [
+          77.142317,
+          28.774912
+        ],
+        [
+          77.142004,
+          28.774903
+        ]
+      ]
+    },
+    {
+      "id": "del-rd-11",
+      "name": "Barapullah Elevated Corridor",
+      "speedKmh": 65,
+      "capacity": 4800,
+      "laneCount": 4,
+      "isArterial": true,
+      "isBridge": false,
+      "coordinates": [
+        [
+          77.257001,
+          28.587492
+        ],
+        [
+          77.257127,
+          28.589166
+        ],
+        [
+          77.254981,
+          28.588737
+        ],
+        [
+          77.254639,
+          28.584363
+        ],
+        [
+          77.253852,
+          28.584482
+        ],
+        [
+          77.253407,
+          28.584641
+        ],
+        [
+          77.252886,
+          28.582563
+        ],
+        [
+          77.251338,
+          28.58276
+        ],
+        [
+          77.248963,
+          28.585502
+        ],
+        [
+          77.244892,
+          28.582722
+        ],
+        [
+          77.245032,
+          28.582544
+        ],
+        [
+          77.241665,
+          28.580765
+        ],
+        [
+          77.239948,
+          28.582373
+        ],
+        [
+          77.238729,
+          28.579241
+        ],
+        [
+          77.237752,
+          28.579495
+        ],
+        [
+          77.238098,
+          28.580994
+        ],
+        [
+          77.240756,
+          28.584472
+        ],
+        [
+          77.240754,
+          28.587362
+        ],
+        [
+          77.234612,
+          28.586913
+        ],
+        [
+          77.233913,
+          28.586578
+        ],
+        [
+          77.233729,
+          28.585099
+        ],
+        [
+          77.229918,
+          28.584785
+        ],
+        [
+          77.22952,
+          28.579752
+        ],
+        [
+          77.229188,
+          28.574763
+        ],
+        [
+          77.229179,
+          28.576547
+        ],
+        [
+          77.228858,
+          28.576822
+        ],
+        [
+          77.22867,
+          28.577797
+        ],
+        [
+          77.22705,
+          28.577892
+        ],
+        [
+          77.226766,
+          28.577269
+        ],
+        [
+          77.227229,
+          28.576611
+        ],
+        [
+          77.224771,
+          28.576774
+        ],
+        [
+          77.224625,
+          28.576066
+        ],
+        [
+          77.220873,
+          28.577623
+        ],
+        [
+          77.21976,
+          28.576856
+        ],
+        [
+          77.219883,
+          28.576493
+        ],
+        [
+          77.217451,
+          28.574778
+        ],
+        [
+          77.218212,
+          28.574822
+        ],
+        [
+          77.218477,
+          28.574253
+        ],
+        [
+          77.216052,
+          28.573136
+        ],
+        [
+          77.215464,
+          28.573407
+        ],
+        [
+          77.215033,
+          28.572975
+        ]
+      ]
+    },
+    {
+      "id": "del-rd-12",
+      "name": "NH 9 / Rohtak Road West Arterial",
+      "speedKmh": 60,
+      "capacity": 5200,
+      "laneCount": 6,
+      "isArterial": true,
+      "isBridge": false,
+      "coordinates": [
+        [
+          77.131817,
+          28.667327
+        ],
+        [
+          77.128978,
+          28.668748
+        ],
+        [
+          77.128215,
+          28.668829
+        ],
+        [
+          77.129013,
+          28.67428
+        ],
+        [
+          77.12913,
+          28.67507
+        ],
+        [
+          77.124107,
+          28.675689
+        ],
+        [
+          77.119018,
+          28.676408
+        ],
+        [
+          77.114034,
+          28.677015
+        ],
+        [
+          77.111602,
+          28.677111
+        ],
+        [
+          77.111554,
+          28.676805
+        ],
+        [
+          77.111893,
+          28.676768
+        ],
+        [
+          77.111657,
+          28.675173
+        ],
+        [
+          77.112018,
+          28.675123
+        ],
+        [
+          77.111657,
+          28.675173
+        ],
+        [
+          77.111893,
+          28.676768
+        ],
+        [
+          77.111554,
+          28.676805
+        ],
+        [
+          77.111633,
+          28.67731
+        ],
+        [
+          77.106381,
+          28.677969
+        ],
+        [
+          77.100788,
+          28.678672
+        ],
+        [
+          77.095331,
+          28.679325
+        ],
+        [
+          77.090217,
+          28.679784
+        ],
+        [
+          77.08492,
+          28.6805
+        ],
+        [
+          77.079606,
+          28.681085
+        ],
+        [
+          77.073185,
+          28.681838
+        ],
+        [
+          77.067684,
+          28.681965
+        ],
+        [
+          77.063939,
+          28.682007
+        ],
+        [
+          77.063883,
+          28.683479
+        ],
+        [
+          77.060501,
+          28.68354
+        ]
+      ]
+    },
+    {
+      "id": "del-rd-13",
+      "name": "Dwarka Arterial & Urban Extension Corridor",
+      "speedKmh": 60,
+      "capacity": 5000,
+      "laneCount": 6,
+      "isArterial": true,
+      "isBridge": false,
+      "coordinates": [
+        [
+          77.123553,
+          28.541999
+        ],
+        [
+          77.123548,
+          28.541815
+        ],
+        [
+          77.122624,
+          28.541864
+        ],
+        [
+          77.122618,
+          28.542656
+        ],
+        [
+          77.119833,
+          28.54119
+        ],
+        [
+          77.119316,
+          28.541959
+        ],
+        [
+          77.118262,
+          28.542061
+        ],
+        [
+          77.115415,
+          28.537437
+        ],
+        [
+          77.11048,
+          28.534688
+        ],
+        [
+          77.107825,
+          28.533056
+        ],
+        [
+          77.106137,
+          28.534024
+        ],
+        [
+          77.104733,
+          28.536068
+        ],
+        [
+          77.103187,
+          28.536775
+        ],
+        [
+          77.098025,
+          28.537585
+        ],
+        [
+          77.094725,
+          28.537438
+        ],
+        [
+          77.088481,
+          28.538476
+        ],
+        [
+          77.082657,
+          28.539881
+        ],
+        [
+          77.079685,
+          28.540942
+        ],
+        [
+          77.073296,
+          28.542426
+        ],
+        [
+          77.065915,
+          28.543963
+        ],
+        [
+          77.061205,
+          28.545247
+        ],
+        [
+          77.056182,
+          28.547752
+        ],
+        [
+          77.054293,
+          28.550271
+        ],
+        [
+          77.056229,
+          28.551386
+        ],
+        [
+          77.058223,
+          28.553539
+        ],
+        [
+          77.057878,
+          28.552962
+        ],
+        [
+          77.061463,
+          28.557115
+        ],
+        [
+          77.063569,
+          28.559747
+        ],
+        [
+          77.062778,
+          28.563331
+        ],
+        [
+          77.062396,
+          28.563408
+        ],
+        [
+          77.066318,
+          28.568026
+        ],
+        [
+          77.066764,
+          28.569009
+        ],
+        [
+          77.065384,
+          28.571935
+        ],
+        [
+          77.060509,
+          28.575213
+        ],
+        [
+          77.055622,
+          28.578486
+        ],
+        [
+          77.049983,
+          28.582239
+        ],
+        [
+          77.051593,
+          28.58458
+        ],
+        [
+          77.050078,
+          28.585771
+        ],
+        [
+          77.052239,
+          28.585125
+        ],
+        [
+          77.056481,
+          28.590135
+        ],
+        [
+          77.057378,
+          28.591599
+        ],
+        [
+          77.052022,
+          28.595172
+        ],
+        [
+          77.047064,
+          28.59852
+        ],
+        [
+          77.042738,
+          28.601374
+        ],
+        [
+          77.038204,
+          28.604376
+        ],
+        [
+          77.035507,
+          28.60627
+        ],
+        [
+          77.033897,
+          28.611163
+        ],
+        [
+          77.032298,
+          28.616026
+        ],
+        [
+          77.031418,
+          28.619129
+        ],
+        [
+          77.031944,
+          28.617989
+        ]
+      ]
     }
   ],
   "populationZones": [
     {
       "id": "del-zone-1",
-      "name": "Yamuna Low-Lying Floodplain & Geeta Colony",
+      "name": "Chandni Chowk & Old Delhi Historic Core",
       "center": [
-        77.26,
-        28.64
+        77.23,
+        28.656
       ],
       "population": 850000,
-      "densityPerKm2": 24000,
-      "elevationMeters": 204,
+      "areaKm2": 21.2,
+      "densityPerKm2": 40000,
+      "elevationMeters": 216,
       "vulnerability": 0.85
     },
     {
       "id": "del-zone-2",
-      "name": "Old Delhi & Chandni Chowk Dense Masonry Sector",
+      "name": "Karol Bagh & Paharganj Dense Commercial Sector",
       "center": [
-        77.23,
-        28.655
+        77.19,
+        28.648
       ],
-      "population": 1200000,
+      "population": 760000,
+      "areaKm2": 23.8,
       "densityPerKm2": 32000,
-      "elevationMeters": 218,
-      "vulnerability": 0.9
+      "elevationMeters": 220,
+      "vulnerability": 0.7
     },
     {
       "id": "del-zone-3",
-      "name": "Connaught Place & Central Administrative Zone",
+      "name": "Kashmere Gate & Yamuna Floodplain Lowlands",
       "center": [
-        77.22,
-        28.625
+        77.235,
+        28.67
       ],
-      "population": 450000,
-      "densityPerKm2": 9500,
-      "elevationMeters": 215,
-      "vulnerability": 0.45
+      "population": 620000,
+      "areaKm2": 24.8,
+      "densityPerKm2": 25000,
+      "elevationMeters": 204,
+      "vulnerability": 0.95
     },
     {
       "id": "del-zone-4",
-      "name": "South Delhi / AIIMS / Saket Residential Corridor",
+      "name": "Connaught Place & Central Secretariat Civic Hub",
       "center": [
         77.215,
-        28.55
+        28.625
       ],
-      "population": 1650000,
-      "densityPerKm2": 14000,
-      "elevationMeters": 226,
-      "vulnerability": 0.5
+      "population": 380000,
+      "areaKm2": 25.3,
+      "densityPerKm2": 15000,
+      "elevationMeters": 218,
+      "vulnerability": 0.4
     },
     {
       "id": "del-zone-5",
-      "name": "East Delhi / Mayur Vihar Trans-Yamuna Sector",
+      "name": "Shahdara & East Delhi Trans-Yamuna Basin",
       "center": [
         77.29,
-        28.605
+        28.672
       ],
-      "population": 1400000,
-      "densityPerKm2": 21000,
+      "population": 1450000,
+      "areaKm2": 41.4,
+      "densityPerKm2": 35000,
       "elevationMeters": 206,
-      "vulnerability": 0.8
+      "vulnerability": 0.88
+    },
+    {
+      "id": "del-zone-6",
+      "name": "Lajpat Nagar & South Delhi Central Hub",
+      "center": [
+        77.24,
+        28.57
+      ],
+      "population": 980000,
+      "areaKm2": 40.8,
+      "densityPerKm2": 24000,
+      "elevationMeters": 222,
+      "vulnerability": 0.5
+    },
+    {
+      "id": "del-zone-7",
+      "name": "Rohini Planned Sub-City Sector",
+      "center": [
+        77.115,
+        28.715
+      ],
+      "population": 1200000,
+      "areaKm2": 60.0,
+      "densityPerKm2": 20000,
+      "elevationMeters": 215,
+      "vulnerability": 0.55
+    },
+    {
+      "id": "del-zone-8",
+      "name": "Dwarka Sub-City Transit Corridor",
+      "center": [
+        77.05,
+        28.585
+      ],
+      "population": 1100000,
+      "areaKm2": 61.1,
+      "densityPerKm2": 18000,
+      "elevationMeters": 225,
+      "vulnerability": 0.45
+    },
+    {
+      "id": "del-zone-9",
+      "name": "Okhla & Sarita Vihar Industrial/Residential Sector",
+      "center": [
+        77.28,
+        28.53
+      ],
+      "population": 820000,
+      "areaKm2": 37.3,
+      "densityPerKm2": 22000,
+      "elevationMeters": 210,
+      "vulnerability": 0.72
+    },
+    {
+      "id": "del-zone-10",
+      "name": "Civil Lines & Delhi University North Quadrant",
+      "center": [
+        77.22,
+        28.69
+      ],
+      "population": 540000,
+      "areaKm2": 30.0,
+      "densityPerKm2": 18000,
+      "elevationMeters": 218,
+      "vulnerability": 0.48
+    },
+    {
+      "id": "del-zone-11",
+      "name": "Saket & Mehrauli Heritage/Medical Corridor",
+      "center": [
+        77.2,
+        28.52
+      ],
+      "population": 750000,
+      "areaKm2": 39.5,
+      "densityPerKm2": 19000,
+      "elevationMeters": 235,
+      "vulnerability": 0.42
     }
   ],
   "buildings": [

@@ -18,7 +18,7 @@ class RoadNetwork:
     rather than simply to the nearest road vertex.
     """
 
-    MAX_SNAP_DISTANCE_KM = 5.0
+    MAX_SNAP_DISTANCE_KM = 8.0
     INTERSECTION_TOLERANCE_DEG = 1e-9
 
     def __init__(self, roads_data: List[Dict[str, Any]]):

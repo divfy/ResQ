@@ -15,6 +15,7 @@ class CascadingFailureEngine:
         self.infrastructure = infrastructure
         self.events: List[Dict[str, Any]] = []
         self._previous_states: Dict[str, str] = {}
+        self._road_entry_time: Dict[str, float] = {}
 
     def _event_on_transition(self, key: str, new_state: str, event: Dict[str, Any]):
         old_state = self._previous_states.get(key)
@@ -105,21 +106,44 @@ class CascadingFailureEngine:
             blocked = False
             state = "NONE"
             max_intensity = 0.0
+            in_hazard = False
             # Explicit bridge IDs are preferred; legacy name matching remains as a compatibility fallback.
             linked_bridges = set(road.get("bridgeIds", []))
             road_name = road.get("name", "").lower()
             bridge_dependency = bool(linked_bridges & closed_bridge_ids) or any(n and n in road_name for n in closed_bridge_names)
-            if bridge_dependency:
-                blocked, state = True, "SEVERE"
 
             for pt in self._densify(road.get("coordinates", [])):
                 impact = hazard.evaluate_point_impact(pt[1], pt[0], origin_lat, origin_lng, elapsed)
                 if impact["in_hazard_zone"]:
+                    in_hazard = True
                     max_intensity = max(max_intensity, impact["intensity"])
-                    if impact["blocked"]:
-                        blocked = True
-                        if impact["damage_state"] != "NONE":
-                            state = impact["damage_state"]
+                    if impact.get("damage_state") not in ("NONE", "EXPOSED"):
+                        state = impact["damage_state"]
+
+            # Delayed road blockage:
+            # Roads do not instantly become impassable upon initial contact with the expanding hazard envelope.
+            # Vehicles can still navigate or evacuate initially. Sustained exposure (debris build-up, deepening water)
+            # is required before the road status turns BLOCKED (red).
+            if bridge_dependency:
+                blocked, state = True, "SEVERE"
+            elif in_hazard:
+                if road["id"] not in self._road_entry_time:
+                    self._road_entry_time[road["id"]] = elapsed
+
+                exposure_seconds = max(0.0, elapsed - self._road_entry_time[road["id"]])
+                # Calibrated soak threshold: between 20s and 45s depending on proximity/intensity
+                soak_threshold = max(20.0, 45.0 - max_intensity * 25.0)
+
+                if exposure_seconds >= soak_threshold:
+                    blocked = True
+                    if state in ("NONE", "EXPOSED"):
+                        state = "SEVERE" if max_intensity > 0.6 else "MODERATE"
+                else:
+                    blocked = False
+                    if state == "NONE":
+                        state = "EXPOSED"
+            else:
+                self._road_entry_time.pop(road["id"], None)
 
             key = f"road:{road['id']}"
             new_state = "BLOCKED" if blocked else "OPEN"

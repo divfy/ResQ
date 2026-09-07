@@ -3,10 +3,11 @@
 import asyncio
 import time
 import uuid
+import math
 from typing import Dict, Any, List, Optional, Set
 from ..geospatial.osm import OSMLoader
 from ..geospatial.routing import RoadNetwork
-from ..geospatial.spatial import create_hazard_circle_polygon
+from ..geospatial.spatial import create_hazard_circle_polygon, haversine_distance_km
 from ..disasters import create_disaster_model
 from ..cascading.failure_engine import CascadingFailureEngine
 from ..evacuation.engine import EvacuationEngine
@@ -86,11 +87,40 @@ class SimulationInstance:
         self.evac_engine.update_network_from_road_status(roads)
         evac_routes = self.evac_engine.compute_evacuation_routes(shelters)
         
-        # 3. Aggregate Overview Metrics
-        city_pop = self.infrastructure.get("population", 5000000)
-        # Proportion of population inside hazard envelope
-        hazard_ratio = min(0.35, (hazard_radius_km / 12.0) ** 1.5 * (severity / 3.0))
-        affected_pop = max(1200, int(city_pop * hazard_ratio * (1.0 + self.elapsed_seconds / 300.0)))
+        # 3. Aggregate Overview Metrics using Localized Population Density Zones
+        zones = self.infrastructure.get("populationZones", [])
+        if zones:
+            total_affected = 0.0
+            for z in zones:
+                z_lng, z_lat = z["center"]
+                z_pop = z.get("population", 0)
+                z_area = z.get("areaKm2", 25.0)
+                z_vuln = z.get("vulnerability", 0.7)
+
+                # Approximate zone radius in km: r = sqrt(area / pi)
+                z_radius_km = math.sqrt(max(1.0, z_area) / math.pi)
+                dist_to_center = haversine_distance_km(self.origin_lat, self.origin_lng, z_lat, z_lng)
+
+                # Spatial overlap between circular hazard envelope and circular population zone
+                if dist_to_center >= (hazard_radius_km + z_radius_km):
+                    overlap_ratio = 0.0
+                elif dist_to_center + z_radius_km <= hazard_radius_km:
+                    overlap_ratio = 1.0
+                else:
+                    overlap_ratio = max(0.0, min(1.0, (hazard_radius_km + z_radius_km - dist_to_center) / (2.0 * z_radius_km)))
+
+                if overlap_ratio > 0:
+                    proximity = max(0.15, 1.0 - dist_to_center / max(0.1, hazard_radius_km + z_radius_km))
+                    sev_factor = min(1.2, (severity / 3.0) ** 0.8)
+                    zone_impact = z_pop * overlap_ratio * proximity * sev_factor * z_vuln
+                    total_affected += zone_impact
+
+            time_growth = 1.0 + min(0.35, max(0, self.elapsed_seconds) / 360.0)
+            affected_pop = max(1200 if hazard_radius_km > 0.5 else 0, int(total_affected * time_growth))
+        else:
+            city_pop = self.infrastructure.get("population", 5000000)
+            hazard_ratio = min(0.35, (hazard_radius_km / 12.0) ** 1.5 * (severity / 3.0))
+            affected_pop = max(1200, int(city_pop * hazard_ratio * (1.0 + self.elapsed_seconds / 300.0)))
         
         blocked_count = sum(1 for r in roads if r["blocked"])
         hosp_avail = sum(1 for h in hospitals if h["operationalStatus"] in ("OPERATIONAL", "STRESSED", "NEAR_CAPACITY") and h.get("availableBeds", 0) > 0)
