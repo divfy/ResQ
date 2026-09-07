@@ -791,7 +791,8 @@
 
         cycloneSwirlMarker = new maplibregl.Marker({
             element: el,
-            anchor: "center"
+            anchor: "center",
+            offset: [0, 0]
         })
         .setLngLat([lng, lat])
         .addTo(map);
